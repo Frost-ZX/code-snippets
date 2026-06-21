@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CYBER AUDIO // NEURAL VISUALIZER</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: #05010d;
+    font-family: 'Courier New', 'Consolas', monospace;
+    color: #00ffff;
+    cursor: default;
+  }
+  canvas { display: block; position: fixed; top: 0; left: 0; z-index: 1; }
+
+  /* HUD 控制面板 */
+  #hud {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 20px 30px; pointer-events: none;
+  }
+  #hud-left, #hud-right { pointer-events: auto; }
+
+  .panel {
+    background: rgba(5, 1, 13, 0.75);
+    border: 1px solid rgba(0, 255, 255, 0.3);
+    padding: 12px 18px;
+    position: relative;
+  }
+  .panel::before, .panel::after {
+    content: '';
+    position: absolute;
+    width: 10px; height: 10px;
+    border: 1px solid #ff00ff;
+  }
+  .panel::before { top: -1px; left: -1px; border-right: none; border-bottom: none; }
+  .panel::after { bottom: -1px; right: -1px; border-left: none; border-top: none; }
+
+  .title {
+    font-size: 11px; letter-spacing: 3px; color: #ff00ff;
+    text-shadow: 0 0 8px #ff00ff;
+    margin-bottom: 8px;
+  }
+  .status {
+    font-size: 10px; letter-spacing: 2px; color: #00ffff;
+    text-shadow: 0 0 6px #00ffff;
+  }
+  .status.off { color: #444; text-shadow: none; }
+  .status.rec { color: #ff0040; text-shadow: 0 0 8px #ff0040; animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: 0.3; } }
+
+  /* 按钮 */
+  #controls {
+    position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+    z-index: 10; display: flex; gap: 40px;
+  }
+  .btn {
+    background: none; border: none; outline: none;
+    font-family: inherit; font-size: 13px; letter-spacing: 4px;
+    color: #00ffff; text-shadow: 0 0 8px #00ffff;
+    cursor: pointer; padding: 8px 4px; position: relative;
+    text-transform: uppercase;
+    transition: color 0.2s, text-shadow 0.2s;
+  }
+  .btn::after {
+    content: ''; position: absolute; bottom: 0; left: 50%;
+    width: 0; height: 1px;
+    background: #ff00ff; box-shadow: 0 0 6px #ff00ff;
+    transition: width 0.3s, left 0.3s;
+  }
+  .btn:hover { color: #ff00ff; text-shadow: 0 0 12px #ff00ff; }
+  .btn:hover::after { width: 100%; left: 0; }
+  .btn:active { transform: scale(0.97); }
+
+  /* 角落装饰 */
+  .corner {
+    position: fixed; width: 60px; height: 60px; z-index: 10;
+    border-color: #ff00ff; pointer-events: none;
+  }
+  .corner.tl { top: 10px; left: 10px; border-top: 1px solid; border-left: 1px solid; }
+  .corner.tr { top: 10px; right: 10px; border-top: 1px solid; border-right: 1px solid; }
+  .corner.bl { bottom: 10px; left: 10px; border-bottom: 1px solid; border-left: 1px solid; }
+  .corner.br { bottom: 10px; right: 10px; border-bottom: 1px solid; border-right: 1px solid; }
+
+  /* 故障文字层 */
+  #glitch-title {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    z-index: 5; font-size: 72px; letter-spacing: 12px; font-weight: bold;
+    color: rgba(0, 255, 255, 0.04);
+    text-shadow: none;
+    pointer-events: none;
+    white-space: nowrap;
+    transition: opacity 0.5s;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="cv"></canvas>
+
+<div id="glitch-title">N E U R O &nbsp; S Y N C</div>
+
+<div class="corner tl"></div>
+<div class="corner tr"></div>
+<div class="corner bl"></div>
+<div class="corner br"></div>
+
+<div id="hud">
+  <div class="panel" id="hud-left">
+    <div class="title">// NEURAL VISUALIZER v2.077</div>
+    <div class="status" id="status-mic">MIC: OFFLINE</div>
+  </div>
+  <div class="panel" id="hud-right">
+    <div class="title">// SIGNAL DATA</div>
+    <div class="status" id="status-fps">FPS: --</div>
+    <div class="status" id="status-vol">VOL: --</div>
+  </div>
+</div>
+
+<div id="controls">
+  <button class="btn" id="btn-mic">启动麦克风</button>
+  <button class="btn" id="btn-fullscreen">全屏</button>
+</div>
+
+<script>
+// ============================================================
+//  CYBER AUDIO VISUALIZER
+// ============================================================
+
+const canvas = document.getElementById('cv');
+const ctx = canvas.getContext('2d');
+const btnMic = document.getElementById('btn-mic');
+const btnFs = document.getElementById('btn-fullscreen');
+const statusMic = document.getElementById('status-mic');
+const statusFps = document.getElementById('status-fps');
+const statusVol = document.getElementById('status-vol');
+const glitchTitle = document.getElementById('glitch-title');
+
+let W, H;
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// --- 音频系统 ---
+let audioCtx = null;
+let analyser = null;
+let source = null;
+let dataArray = null;
+let freqArray = null;
+let micActive = false;
+let micStream = null;
+
+async function toggleMic() {
+  if (micActive) {
+    stopMic();
+  } else {
+    await startMic();
+  }
+}
+
+async function startMic() {
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    source = audioCtx.createMediaStreamSource(micStream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0.82;
+    source.connect(analyser);
+    dataArray = new Uint8Array(analyser.fftSize);
+    freqArray = new Uint8Array(analyser.frequencyBinCount);
+    micActive = true;
+    btnMic.textContent = '停止麦克风';
+    statusMic.textContent = 'MIC: ACTIVE';
+    statusMic.classList.add('rec');
+    glitchTitle.style.opacity = '0';
+    initParticles();
+  } catch (e) {
+    statusMic.textContent = 'MIC: ACCESS DENIED';
+    statusMic.classList.add('off');
+  }
+}
+
+function stopMic() {
+  if (micStream) {
+    micStream.getTracks().forEach(t => t.stop());
+    micStream = null;
+  }
+  if (audioCtx) {
+    audioCtx.close();
+    audioCtx = null;
+  }
+  analyser = null;
+  source = null;
+  dataArray = null;
+  freqArray = null;
+  micActive = false;
+  btnMic.textContent = '启动麦克风';
+  statusMic.textContent = 'MIC: OFFLINE';
+  statusMic.classList.remove('rec');
+  glitchTitle.style.opacity = '1';
+}
+
+btnMic.addEventListener('click', toggleMic);
+
+// --- 全屏 ---
+btnFs.addEventListener('click', () => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen();
+    btnFs.textContent = '退出全屏';
+  } else {
+    document.exitFullscreen();
+    btnFs.textContent = '全屏';
+  }
+});
+document.addEventListener('fullscreenchange', () => {
+  btnFs.textContent = document.fullscreenElement ? '退出全屏' : '全屏';
+});
+
+// --- 辅助函数 ---
+function neonLine(x1, y1, x2, y2, color, glow) {
+  ctx.shadowBlur = glow;
+  ctx.shadowColor = color;
+  ctx.strokeStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+}
+
+function neonCircle(x, y, r, color, glow, lw) {
+  ctx.shadowBlur = glow;
+  ctx.shadowColor = color;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lw;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+// --- 粒子系统 ---
+let particles = [];
+class Particle {
+  constructor() { this.reset(); this.y = Math.random() * H; }
+  reset() {
+    this.x = Math.random() * W;
+    this.y = H + 10;
+    this.speed = 0.5 + Math.random() * 2.5;
+    this.size = 0.5 + Math.random() * 2;
+    this.life = 1;
+    this.freqIndex = Math.floor(Math.random() * 60);
+    this.color = Math.random() > 0.5 ? '#ff00ff' : '#00ffff';
+    this.vx = (Math.random() - 0.5) * 0.5;
+  }
+  update(intensity) {
+    let boost = 1;
+    if (freqArray && freqArray.length) {
+      boost = 1 + (freqArray[this.freqIndex] / 255) * intensity;
+    }
+    this.y -= this.speed * boost;
+    this.x += this.vx + Math.sin(this.y * 0.01) * 0.3;
+    if (this.y < -10) this.reset();
+  }
+  draw() {
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = this.color;
+    ctx.fillStyle = this.color;
+    ctx.globalAlpha = 0.6;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+}
+
+function initParticles() {
+  particles = [];
+  for (let i = 0; i < 120; i++) particles.push(new Particle());
+}
+initParticles();
+
+// --- 扫描线效果 ---
+let scanY = 0;
+
+// --- 静态噪声 ---
+function drawNoise() {
+  const imgData = ctx.createImageData(W, 2);
+  for (let i = 0; i < imgData.data.length; i += 4) {
+    const v = Math.random() * 30;
+    imgData.data[i] = v;
+    imgData.data[i + 1] = v;
+    imgData.data[i + 2] = v;
+    imgData.data[i + 3] = Math.random() * 15;
+  }
+  ctx.putImageData(imgData, 0, Math.floor(Math.random() * H));
+}
+
+// --- 绘制透视网格 ---
+function drawGrid(time) {
+  const horizon = H * 0.55;
+  const vanishX = W / 2;
+  ctx.strokeStyle = 'rgba(0, 255, 255, 0.08)';
+  ctx.lineWidth = 1;
+  ctx.shadowBlur = 0;
+
+  // 横线（透视）
+  for (let i = 0; i < 20; i++) {
+    const t = i / 20;
+    const perspective = t * t;
+    const y = horizon + (H - horizon) * perspective;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(W, y);
+    ctx.stroke();
+  }
+
+  // 竖线（向消失点汇聚）
+  const numV = 24;
+  for (let i = 0; i <= numV; i++) {
+    const spread = (i / numV - 0.5) * 2;
+    ctx.beginPath();
+    ctx.moveTo(W / 2 + spread * W * 0.6, H);
+    ctx.lineTo(vanishX, horizon);
+    ctx.stroke();
+  }
+
+  // 地平线上的霓虹线
+  ctx.shadowBlur = 15;
+  ctx.shadowColor = '#ff00ff';
+  ctx.strokeStyle = 'rgba(255, 0, 255, 0.5)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, horizon);
+  ctx.lineTo(W, horizon);
+  ctx.stroke();
+
+  // 天空/远景的光柱
+  const numBeams = 8;
+  for (let i = 0; i < numBeams; i++) {
+    const bx = (W / (numBeams + 1)) * (i + 1);
+    const h = 80 + Math.sin(time * 0.001 + i) * 30 + (freqArray ? (freqArray[i * 8] / 255) * 100 : 0);
+    const grad = ctx.createLinearGradient(bx, horizon, bx, horizon - h);
+    grad.addColorStop(0, 'rgba(0, 255, 255, 0.3)');
+    grad.addColorStop(1, 'rgba(0, 255, 255, 0)');
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = '#00ffff';
+    ctx.fillStyle = grad;
+    ctx.fillRect(bx - 2, horizon - h, 4, h);
+  }
+}
+
+// --- 底部频谱柱状图（霓虹城市天际线风格）---
+function drawSkyline() {
+  if (!freqArray) return;
+  const binCount = analyser.frequencyBinCount;
+  const usable = Math.floor(binCount * 0.6);
+  const barCount = 80;
+  const barW = W / barCount;
+  const baseY = H * 0.9;
+
+  for (let i = 0; i < barCount; i++) {
+    const idx = Math.floor((i / barCount) * usable);
+    const val = freqArray[idx] / 255;
+    const barH = val * H * 0.45;
+
+    // 主柱
+    const hue = (i / barCount) * 60 + 260; // 紫到粉
+    const color1 = `hsl(${hue}, 100%, 55%)`;
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = color1;
+
+    const grad = ctx.createLinearGradient(0, baseY - barH, 0, baseY);
+    grad.addColorStop(0, color1);
+    grad.addColorStop(1, 'rgba(0,0,0,0.5)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(i * barW + 1, baseY - barH, barW - 2, barH);
+
+    // 顶部亮点
+    ctx.shadowBlur = 20;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(i * barW + 1, baseY - barH - 2, barW - 2, 2);
+  }
+  ctx.shadowBlur = 0;
+}
+
+// --- 中心旋转多边形核心 ---
+function drawCore(time, bass, mid, treb) {
+  const cx = W / 2;
+  const cy = H * 0.45;
+  const baseR = 60;
+  const pulse = baseR + bass * 40;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+
+  // 外层旋转三角环
+  for (let ring = 0; ring < 3; ring++) {
+    const r = pulse + ring * 30 + Math.sin(time * 0.002 + ring) * 10;
+    const sides = 3 + ring * 2;
+    const rot = time * 0.0005 * (ring % 2 === 0 ? 1 : -1);
+
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = ring % 2 === 0 ? '#ff00ff' : '#00ffff';
+    ctx.strokeStyle = ring % 2 === 0 ? `rgba(255,0,255,${0.6 - ring * 0.15})` : `rgba(0,255,255,${0.6 - ring * 0.15})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i <= sides; i++) {
+      const angle = (i / sides) * Math.PI * 2 + rot;
+      const rr = r + Math.sin(angle * 3 + time * 0.003) * (5 + mid * 15);
+      const x = Math.cos(angle) * rr;
+      const y = Math.sin(angle) * rr;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+// --- 圆形频谱环 ---
+function drawSpectrumRing(time, bass, mid, treb) {
+  const cx = W / 2;
+  const cy = H * 0.45;
+  if (!freqArray) {
+    neonCircle(cx, cy, 140, 'rgba(0, 255, 255, 0.15)', 5, 1);
+    return;
+  }
+
+  const binCount = analyser.frequencyBinCount;
+  const count = 128;
+  const baseR = 140;
+  const rot = time * 0.0003;
+
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * Math.PI * 2 + rot;
+    const idx = Math.floor((i / count) * binCount * 0.5);
+    const val = freqArray[idx] / 255;
+    const len = val * 80;
+
+    const x1 = cx + Math.cos(angle) * baseR;
+    const y1 = cy + Math.sin(angle) * baseR;
+    const x2 = cx + Math.cos(angle) * (baseR + len);
+    const y2 = cy + Math.sin(angle) * (baseR + len);
+
+    const color = i % 2 === 0 ? '#00ffff' : '#ff00ff';
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = color;
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.4 + val * 0.6;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
+}
+
+// --- 顶部波形 ---
+function drawWaveform() {
+  if (!dataArray) return;
+  analyser.getByteTimeDomainData(dataArray);
+  const waveY = H * 0.08;
+  const waveH = 40;
+
+  ctx.shadowBlur = 10;
+  ctx.shadowColor = '#00ffff';
+  ctx.strokeStyle = '#00ffff';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  const step = W / dataArray.length;
+  for (let i = 0; i < dataArray.length; i++) {
+    const v = dataArray[i] / 128.0 - 1;
+    const x = i * step;
+    const y = waveY + v * waveH;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+}
+
+// --- 侧边频谱柱 ---
+function drawSideBars() {
+  if (!freqArray) return;
+  const count = 24;
+  const binCount = analyser.frequencyBinCount;
+  const barH = 6;
+  const gap = 4;
+  const maxW = 100;
+
+  // 左侧
+  for (let i = 0; i < count; i++) {
+    const idx = Math.floor((i / count) * binCount * 0.4);
+    const val = freqArray[idx] / 255;
+    const w = val * maxW;
+    const y = H * 0.15 + i * (barH + gap);
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = '#ff00ff';
+    ctx.fillStyle = `rgba(255, 0, 255, ${0.3 + val * 0.7})`;
+    ctx.fillRect(20, y, w, barH);
+  }
+
+  // 右侧（镜像）
+  for (let i = 0; i < count; i++) {
+    const idx = Math.floor((i / count) * binCount * 0.4) + 10;
+    const val = freqArray[idx] / 255;
+    const w = val * maxW;
+    const y = H * 0.15 + i * (barH + gap);
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = '#00ffff';
+    ctx.fillStyle = `rgba(0, 255, 255, ${0.3 + val * 0.7})`;
+    ctx.fillRect(W - 20 - w, y, w, barH);
+  }
+  ctx.shadowBlur = 0;
+}
+
+// --- 扫描线 ---
+function drawScanlines() {
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.04)';
+  for (let y = 0; y < H; y += 3) {
+    ctx.fillRect(0, y, W, 1);
+  }
+  // 移动扫描线
+  scanY = (scanY + 2) % H;
+  const grad = ctx.createLinearGradient(0, scanY - 80, 0, scanY + 80);
+  grad.addColorStop(0, 'rgba(0, 255, 255, 0)');
+  grad.addColorStop(0.5, 'rgba(0, 255, 255, 0.04)');
+  grad.addColorStop(1, 'rgba(0, 255, 255, 0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, scanY - 80, W, 160);
+}
+
+// --- 故障效果（偶尔触发）---
+let glitchTimer = 0;
+let glitchActive = false;
+let glitchDuration = 0;
+function drawGlitch(time) {
+  glitchTimer++;
+  if (!glitchActive && Math.random() < 0.001) {
+    glitchActive = true;
+    glitchDuration = 5 + Math.floor(Math.random() * 15);
+  }
+  if (glitchActive) {
+    glitchDuration--;
+    if (glitchDuration <= 0) glitchActive = false;
+    // RGB 偏移切片
+    const slices = 3;
+    for (let s = 0; s < slices; s++) {
+      const sy = Math.floor(Math.random() * H);
+      const sh = 5 + Math.floor(Math.random() * 30);
+      const offset = (Math.random() - 0.5) * 20;
+      const slice = ctx.getImageData(0, sy, W, sh);
+      ctx.putImageData(slice, offset, sy);
+    }
+  }
+}
+
+// --- 计算频段能量 ---
+function getEnergy() {
+  if (!freqArray) return { bass: 0, mid: 0, treb: 0, vol: 0 };
+  const binCount = freqArray.length;
+  let bass = 0, mid = 0, treb = 0, vol = 0;
+  const bassEnd = Math.floor(binCount * 0.08);
+  const midEnd = Math.floor(binCount * 0.35);
+  for (let i = 0; i < bassEnd; i++) bass += freqArray[i];
+  for (let i = bassEnd; i < midEnd; i++) mid += freqArray[i];
+  for (let i = midEnd; i < binCount; i++) treb += freqArray[i];
+  bass /= (bassEnd * 255);
+  mid /= ((midEnd - bassEnd) * 255);
+  treb /= ((binCount - midEnd) * 255);
+  vol = (bass + mid + treb) / 3;
+  return { bass, mid, treb, vol };
+}
+
+// --- FPS 计算 ---
+let lastTime = performance.now();
+let frameCount = 0;
+let fpsValue = 0;
+let fpsTimer = 0;
+
+// --- 主循环 ---
+function frame(time) {
+  requestAnimationFrame(frame);
+
+  // FPS
+  frameCount++;
+  fpsTimer += time - lastTime;
+  lastTime = time;
+  if (fpsTimer >= 1000) {
+    fpsValue = frameCount;
+    frameCount = 0;
+    fpsTimer = 0;
+    statusFps.textContent = 'FPS: ' + fpsValue;
+  }
+
+  // 获取音频数据
+  if (analyser && freqArray) {
+    analyser.getByteFrequencyData(freqArray);
+  }
+
+  // 清屏（带拖尾）
+  ctx.fillStyle = 'rgba(5, 1, 13, 0.25)';
+  ctx.fillRect(0, 0, W, H);
+
+  const energy = getEnergy();
+  statusVol.textContent = 'VOL: ' + Math.floor(energy.vol * 100) + '%';
+
+  // 绘制各层
+  drawGrid(time);
+  drawSkyline();
+
+  // 粒子
+  for (const p of particles) {
+    p.update(3);
+    p.draw();
+  }
+
+  drawSpectrumRing(time, energy.bass, energy.mid, energy.treb);
+  drawCore(time, energy.bass, energy.mid, energy.treb);
+  drawWaveform();
+  drawSideBars();
+
+  // 中心十字准星
+  const cx = W / 2, cy = H * 0.45;
+  ctx.strokeStyle = 'rgba(0, 255, 255, 0.2)';
+  ctx.lineWidth = 1;
+  ctx.shadowBlur = 0;
+  ctx.beginPath();
+  ctx.moveTo(cx - 200, cy); ctx.lineTo(cx - 100, cy);
+  ctx.moveTo(cx + 100, cy); ctx.lineTo(cx + 200, cy);
+  ctx.moveTo(cx, cy - 200); ctx.lineTo(cx, cy - 100);
+  ctx.moveTo(cx, cy + 100); ctx.lineTo(cx, cy + 200);
+  ctx.stroke();
+
+  drawScanlines();
+  drawNoise();
+  drawGlitch(time);
+
+  ctx.shadowBlur = 0;
+}
+
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

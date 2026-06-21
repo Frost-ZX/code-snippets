@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>音频可视化 - Audio Visualizer</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #000;
+      overflow: hidden;
+      font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+      color: #fff;
+    }
+
+    canvas {
+      display: block;
+      position: fixed;
+      top: 0;
+      left: 0;
+    }
+
+    /* 控制面板 */
+    .controls {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      z-index: 100;
+      padding: 6px 12px;
+    }
+
+    .btn {
+      padding: 6px 14px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 400;
+      transition: all 0.2s ease;
+      background: transparent;
+      color: rgba(255, 255, 255, 0.55);
+      outline: none;
+      letter-spacing: 0.5px;
+    }
+
+    .btn:hover {
+      color: rgba(255, 255, 255, 0.9);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .btn:active {
+      color: #fff;
+    }
+
+    .btn.active {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .btn.mic-btn.active {
+      color: #4da6ff;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    /* 标题 */
+    .title {
+      position: fixed;
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 13px;
+      font-weight: 400;
+      letter-spacing: 8px;
+      text-transform: uppercase;
+      z-index: 100;
+      color: rgba(255, 255, 255, 0.3);
+      user-select: none;
+    }
+
+    /* 音量条 */
+    .volume-bar {
+      position: fixed;
+      right: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 3px;
+      height: 120px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 2px;
+      overflow: hidden;
+      z-index: 100;
+    }
+
+    .volume-fill {
+      position: absolute;
+      bottom: 0;
+      width: 100%;
+      background: rgba(77, 166, 255, 0.5);
+      border-radius: 2px;
+      transition: height 0.1s ease;
+    }
+
+    /* 提示文字 */
+    .hint {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 14px;
+      opacity: 0.25;
+      text-align: center;
+      z-index: 50;
+      pointer-events: none;
+      transition: opacity 0.5s ease;
+      letter-spacing: 3px;
+      font-weight: 300;
+    }
+
+    .hint.hidden {
+      opacity: 0;
+    }
+
+    /* 音频信息 */
+    .track-info {
+      position: fixed;
+      top: 55px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 12px;
+      opacity: 0;
+      z-index: 100;
+      text-align: center;
+      transition: opacity 0.5s ease;
+      color: rgba(255, 255, 255, 0.4);
+    }
+
+    .track-info.visible {
+      opacity: 1;
+    }
+
+    /* 播放进度 */
+    .progress-container {
+      position: fixed;
+      bottom: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 240px;
+      z-index: 100;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .progress-container.visible {
+      opacity: 1;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 2px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 1px;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: rgba(77, 166, 255, 0.5);
+      border-radius: 1px;
+      width: 0%;
+      transition: width 0.1s linear;
+    }
+
+    .time-display {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      opacity: 0.3;
+      margin-top: 4px;
+    }
+
+    /* 分割线 */
+    .divider {
+      width: 1px;
+      height: 14px;
+      background: rgba(255, 255, 255, 0.12);
+      margin: 0 4px;
+    }
+
+    /* 震动效果 */
+    .shake {
+      animation: shake 0.15s ease-out;
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translate(0, 0); }
+      25% { transform: translate(-3px, 2px); }
+      50% { transform: translate(2px, -3px); }
+      75% { transform: translate(-2px, -1px); }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+
+  <div class="title">AUDIO VISUALIZER</div>
+  <div class="track-info" id="trackInfo"></div>
+
+  <div class="hint" id="hint">
+    请选择音频文件或开启麦克风
+  </div>
+
+  <div class="volume-bar">
+    <div class="volume-fill" id="volumeFill"></div>
+  </div>
+
+  <div class="progress-container" id="progressContainer">
+    <div class="progress-bar" id="progressBar">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+    <div class="time-display">
+      <span id="currentTime">0:00</span>
+      <span id="totalTime">0:00</span>
+    </div>
+  </div>
+
+  <div class="controls">
+    <input type="file" id="fileInput" accept="audio/*">
+    <button class="btn" id="uploadBtn">打开文件</button>
+    <button class="btn mic-btn" id="micBtn">麦克风</button>
+
+    <div class="divider"></div>
+
+    <button class="btn" id="playBtn" style="display:none;">播放</button>
+
+    <div class="divider"></div>
+
+    <button class="btn" id="fullscreenBtn">全屏</button>
+  </div>
+
+  <script>
+    // ==================== 初始化 ====================
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    let width, height;
+
+    function resize() {
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+      initStars();
+    }
+    window.addEventListener('resize', resize);
+
+    // ==================== 音频相关 ====================
+    let audioContext;
+    let analyser;
+    let source;
+    let audio = new Audio();
+    let dataArray;
+    let bufferLength;
+    let isPlaying = false;
+    let isMicActive = false;
+    let micStream;
+    let animationId;
+
+    // 初始化音频上下文
+    function initAudio() {
+      if (audioContext) return;
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.8;
+      bufferLength = analyser.frequencyBinCount;
+      dataArray = new Uint8Array(bufferLength);
+    }
+
+    // 播放音频文件
+    function playFile(file) {
+      initAudio();
+
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+
+      stopMic();
+
+      const url = URL.createObjectURL(file);
+      audio.src = url;
+
+      if (source) {
+        source.disconnect();
+      }
+
+      source = audioContext.createMediaElementSource(audio);
+      source.connect(analyser);
+      analyser.connect(audioContext.destination);
+
+      audio.play();
+      isPlaying = true;
+
+      document.getElementById('playBtn').style.display = 'inline-block';
+      document.getElementById('playBtn').textContent = '暂停';
+      document.getElementById('hint').classList.add('hidden');
+      document.getElementById('progressContainer').classList.add('visible');
+      document.getElementById('trackInfo').classList.add('visible');
+      document.getElementById('trackInfo').textContent = file.name.replace(/\.[^/.]+$/, '');
+
+      audio.addEventListener('loadedmetadata', () => {
+        document.getElementById('totalTime').textContent = formatTime(audio.duration);
+      });
+    }
+
+    // 使用麦克风
+    async function toggleMic() {
+      if (isMicActive) {
+        stopMic();
+        return;
+      }
+
+      initAudio();
+
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        audio.pause();
+        isPlaying = false;
+        if (source) source.disconnect();
+
+        source = audioContext.createMediaStreamSource(micStream);
+        source.connect(analyser);
+
+        isMicActive = true;
+        document.getElementById('micBtn').classList.add('active');
+        document.getElementById('hint').classList.add('hidden');
+        document.getElementById('playBtn').style.display = 'none';
+        document.getElementById('progressContainer').classList.remove('visible');
+        document.getElementById('trackInfo').classList.add('visible');
+        document.getElementById('trackInfo').textContent = '麦克风输入';
+      } catch (err) {
+        alert('无法访问麦克风，请检查权限设置。');
+        console.error(err);
+      }
+    }
+
+    function stopMic() {
+      if (micStream) {
+        micStream.getTracks().forEach(track => track.stop());
+        micStream = null;
+      }
+      isMicActive = false;
+      document.getElementById('micBtn').classList.remove('active');
+    }
+
+    // 格式化时间
+    function formatTime(seconds) {
+      if (isNaN(seconds)) return '0:00';
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60);
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    // ==================== 背景星星 ====================
+    let stars = [];
+    const STAR_COUNT = 200;
+
+    function initStars() {
+      stars = [];
+      for (let i = 0; i < STAR_COUNT; i++) {
+        stars.push({
+          x: Math.random() * width,
+          y: Math.random() * height,
+          size: Math.random() * 1.2 + 0.3,
+          brightness: Math.random() * 0.5 + 0.3,
+          twinkleSpeed: Math.random() * 0.02 + 0.005,
+          twinklePhase: Math.random() * Math.PI * 2
+        });
+      }
+    }
+
+    function drawStars(time) {
+      for (const star of stars) {
+        const twinkle = Math.sin(time * star.twinkleSpeed + star.twinklePhase) * 0.3 + 0.7;
+        const alpha = star.brightness * twinkle;
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = 'rgba(220, 230, 255, 1)';
+        ctx.shadowBlur = star.size * 2;
+        ctx.shadowColor = 'rgba(180, 200, 255, 0.4)';
+        ctx.beginPath();
+        ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    // ==================== 流星系统 ====================
+    let meteors = [];
+
+    class Meteor {
+      constructor(options = {}) {
+        // 流星起始位置（固定从右上角飞入）
+        this.x = width * 0.5 + Math.random() * width * 0.8;
+        this.y = -20 - Math.random() * height * 0.3;
+
+        // 飞行角度（固定从右上到左下，略有随机偏移）
+        this.angle = Math.PI * 3 / 4 + (Math.random() - 0.5) * 0.2; // 约135°方向（左下），偏移±11°
+
+        this.speed = options.speed || (6 + Math.random() * 8);
+        this.vx = Math.cos(this.angle) * this.speed;
+        this.vy = Math.sin(this.angle) * this.speed;
+
+        // 外观属性
+        this.hue = options.hue !== undefined ? options.hue : (200 + Math.random() * 40); // 蓝色调为主
+        this.size = options.size || (1.5 + Math.random() * 2);
+        this.tailLength = options.tailLength || (80 + Math.random() * 120);
+        this.life = 1;
+        this.decay = options.decay || (0.003 + Math.random() * 0.004);
+
+        // 尾迹粒子
+        this.trailParticles = [];
+        this.trailTimer = 0;
+      }
+
+      update(intensity) {
+        // 速度受音频强度影响
+        const speedMult = 1 + intensity * 2.5;
+        this.x += this.vx * speedMult;
+        this.y += this.vy * speedMult;
+
+        // 产生尾迹粒子
+        this.trailTimer++;
+        if (this.trailTimer >= 1) {
+          this.trailTimer = 0;
+          this.trailParticles.push({
+            x: this.x,
+            y: this.y,
+            vx: -this.vx * 0.1 + (Math.random() - 0.5) * 0.5,
+            vy: -this.vy * 0.1 + (Math.random() - 0.5) * 0.5,
+            size: this.size * (0.3 + Math.random() * 0.4),
+            life: 1,
+            decay: 0.02 + Math.random() * 0.03
+          });
+        }
+
+        // 更新尾迹粒子
+        for (let i = this.trailParticles.length - 1; i >= 0; i--) {
+          const p = this.trailParticles[i];
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vx *= 0.96;
+          p.vy *= 0.96;
+          p.life -= p.decay;
+          p.size *= 0.97;
+          if (p.life <= 0) {
+            this.trailParticles.splice(i, 1);
+          }
+        }
+
+        // 生命周期衰减
+        this.life -= this.decay;
+
+        // 超出屏幕（左下方向）时加速消亡
+        if (this.x < -200 || this.y > height + 200) {
+          this.life = Math.min(this.life, 0.3);
+          this.decay = Math.max(this.decay, 0.02);
+        }
+      }
+
+      draw() {
+        // 绘制尾迹粒子
+        for (const p of this.trailParticles) {
+          ctx.save();
+          ctx.globalAlpha = p.life * this.life * 0.6;
+          ctx.fillStyle = `hsl(${this.hue}, 90%, ${60 + p.life * 20}%)`;
+          ctx.shadowBlur = 6;
+          ctx.shadowColor = `hsl(${this.hue}, 100%, 60%)`;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+
+        // 绘制流星拖尾（渐变线）
+        const tailX = this.x - Math.cos(this.angle) * this.tailLength * this.life;
+        const tailY = this.y - Math.sin(this.angle) * this.tailLength * this.life;
+
+        const tailGrad = ctx.createLinearGradient(this.x, this.y, tailX, tailY);
+        tailGrad.addColorStop(0, `hsla(${this.hue}, 100%, 85%, ${this.life})`);
+        tailGrad.addColorStop(0.1, `hsla(${this.hue}, 95%, 70%, ${this.life * 0.7})`);
+        tailGrad.addColorStop(0.5, `hsla(${this.hue}, 80%, 55%, ${this.life * 0.3})`);
+        tailGrad.addColorStop(1, `hsla(${this.hue}, 60%, 40%, 0)`);
+
+        ctx.save();
+        ctx.strokeStyle = tailGrad;
+        ctx.lineWidth = this.size * 2;
+        ctx.lineCap = 'round';
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = `hsl(${this.hue}, 100%, 60%)`;
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y);
+        ctx.lineTo(tailX, tailY);
+        ctx.stroke();
+        ctx.restore();
+
+        // 绘制流星头部（明亮光点）
+        ctx.save();
+        const headGrad = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size * 6);
+        headGrad.addColorStop(0, `hsla(${this.hue}, 100%, 95%, ${this.life})`);
+        headGrad.addColorStop(0.2, `hsla(${this.hue}, 100%, 75%, ${this.life * 0.8})`);
+        headGrad.addColorStop(0.5, `hsla(${this.hue}, 90%, 55%, ${this.life * 0.3})`);
+        headGrad.addColorStop(1, `hsla(${this.hue}, 80%, 40%, 0)`);
+        ctx.fillStyle = headGrad;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size * 6, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 头部核心
+        ctx.fillStyle = `hsla(${this.hue}, 100%, 95%, ${this.life})`;
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = `hsl(${this.hue}, 100%, 70%)`;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      isDead() {
+        return this.life <= 0;
+      }
+    }
+
+    // ==================== 爆发粒子（流星撞击/消散效果） ====================
+    let burstParticles = [];
+
+    function spawnBurst(x, y, hue, count, intensity) {
+      for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = (1 + Math.random() * 4) * (1 + intensity);
+        burstParticles.push({
+          x: x,
+          y: y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          size: Math.random() * 2.5 + 0.8,
+          life: 1,
+          decay: 0.01 + Math.random() * 0.02,
+          hue: hue + (Math.random() - 0.5) * 30,
+          gravity: 0.02 + Math.random() * 0.03
+        });
+      }
+    }
+
+    function updateBurstParticles() {
+      for (let i = burstParticles.length - 1; i >= 0; i--) {
+        const p = burstParticles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += p.gravity;
+        p.vx *= 0.98;
+        p.vy *= 0.98;
+        p.life -= p.decay;
+        p.size *= 0.985;
+        if (p.life <= 0) {
+          burstParticles.splice(i, 1);
+        }
+      }
+    }
+
+    function drawBurstParticles() {
+      for (const p of burstParticles) {
+        ctx.save();
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = `hsl(${p.hue}, 90%, ${50 + p.life * 30}%)`;
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = `hsl(${p.hue}, 100%, 60%)`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    // ==================== 地面辉光 ====================
+    function drawGroundGlow(bass, mid, treble) {
+      const gradient = ctx.createLinearGradient(0, height - 200, 0, height);
+      const glowIntensity = bass * 0.4 + mid * 0.2;
+      gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+      gradient.addColorStop(0.5, `hsla(210, 60%, 15%, ${glowIntensity * 0.3})`);
+      gradient.addColorStop(1, `hsla(220, 70%, 10%, ${glowIntensity * 0.5})`);
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, height - 200, width, 200);
+
+      // 地平线光带
+      ctx.save();
+      ctx.fillStyle = `hsla(210, 80%, 35%, ${glowIntensity * 0.15})`;
+      ctx.fillRect(0, height - 3, width, 3);
+      ctx.restore();
+    }
+
+    // ==================== 节拍检测 ====================
+    let beatHistory = [];
+    let beatCooldown = 0;
+
+    function detectBeat(bass) {
+      beatHistory.push(bass);
+      if (beatHistory.length > 40) beatHistory.shift();
+      const avg = beatHistory.reduce((a, b) => a + b, 0) / beatHistory.length;
+      const variance = beatHistory.reduce((a, b) => a + (b - avg) ** 2, 0) / beatHistory.length;
+      const threshold = avg + Math.sqrt(variance) * 1.4;
+      if (beatCooldown > 0) {
+        beatCooldown--;
+        return false;
+      }
+      if (bass > threshold && bass > 0.35) {
+        beatCooldown = 6;
+        return true;
+      }
+      return false;
+    }
+
+    // ==================== 频率分析 ====================
+    function getFrequencyData() {
+      if (!analyser) return { bass: 0, mid: 0, treble: 0, avg: 0 };
+
+      analyser.getByteFrequencyData(dataArray);
+
+      // 划分频段
+      const bassEnd = Math.floor(bufferLength * 0.1);
+      const midEnd = Math.floor(bufferLength * 0.4);
+
+      let bassSum = 0, midSum = 0, trebleSum = 0, totalSum = 0;
+
+      for (let i = 0; i < bufferLength; i++) {
+        totalSum += dataArray[i];
+        if (i < bassEnd) bassSum += dataArray[i];
+        else if (i < midEnd) midSum += dataArray[i];
+        else trebleSum += dataArray[i];
+      }
+
+      return {
+        bass: bassSum / bassEnd / 255,
+        mid: midSum / (midEnd - bassEnd) / 255,
+        treble: trebleSum / (bufferLength - midEnd) / 255,
+        avg: totalSum / bufferLength / 255
+      };
+    }
+
+    // ==================== 主渲染循环 ====================
+    let lastTime = 0;
+    let meteorSpawnTimer = 0;
+
+    function render(time) {
+      animationId = requestAnimationFrame(render);
+
+      const dt = time - lastTime;
+      lastTime = time;
+
+      // 获取音频数据
+      const { bass, mid, treble, avg } = getFrequencyData();
+
+      // 节拍检测
+      const isBeat = detectBeat(bass);
+
+      // 更新音量条
+      document.getElementById('volumeFill').style.height = `${avg * 100}%`;
+
+      // 更新播放进度
+      if (isPlaying && audio.duration) {
+        const progress = (audio.currentTime / audio.duration) * 100;
+        document.getElementById('progressFill').style.width = `${progress}%`;
+        document.getElementById('currentTime').textContent = formatTime(audio.currentTime);
+      }
+
+      // 清除画布（带有微弱拖尾效果）
+      ctx.fillStyle = 'rgba(5, 5, 15, 0.2)';
+      ctx.fillRect(0, 0, width, height);
+
+      // 绘制背景星星
+      drawStars(time);
+
+      // 绘制地面辉光
+      drawGroundGlow(bass, mid, treble);
+
+      // 生成流星
+      meteorSpawnTimer += dt;
+      const baseSpawnRate = 400; // 基础生成间隔（毫秒）
+      const spawnRate = baseSpawnRate / (1 + avg * 3); // 音频越强流星越密集
+      if (meteorSpawnTimer > spawnRate) {
+        meteorSpawnTimer = 0;
+        const hue = 190 + Math.random() * 50; // 蓝色调（深蓝到浅蓝青）
+        meteors.push(new Meteor({ hue }));
+
+        // 中高频时额外生成小型流星
+        if (mid > 0.4 && Math.random() < 0.5) {
+          meteors.push(new Meteor({
+            size: 1 + Math.random() * 1,
+            tailLength: 40 + Math.random() * 60,
+            speed: 8 + Math.random() * 10,
+            decay: 0.005 + Math.random() * 0.005,
+            hue: 200 + Math.random() * 40
+          }));
+        }
+      }
+
+      // 节拍爆发：流星雨
+      if (isBeat) {
+        const burstCount = Math.floor(3 + bass * 8);
+        for (let i = 0; i < burstCount; i++) {
+          const hue = 190 + Math.random() * 50;
+          meteors.push(new Meteor({
+            size: 2 + Math.random() * 2,
+            tailLength: 100 + Math.random() * 150,
+            speed: 10 + Math.random() * 12 + bass * 8,
+            hue: hue
+          }));
+        }
+
+        // 屏幕微震
+        if (bass > 0.5) {
+          document.body.classList.add('shake');
+          setTimeout(() => document.body.classList.remove('shake'), 150);
+        }
+      }
+
+      // 更新和绘制流星
+      for (let i = meteors.length - 1; i >= 0; i--) {
+        const m = meteors[i];
+        m.update(avg);
+
+        // 流星消亡时产生爆发粒子
+        if (m.life < 0.1 && m.life > 0.05 && !m.burst) {
+          m.burst = true;
+          const burstIntensity = avg * (isBeat ? 2 : 1);
+          spawnBurst(m.x, m.y, m.hue, Math.floor(5 + avg * 15), burstIntensity);
+        }
+
+        m.draw();
+
+        if (m.isDead()) {
+          meteors.splice(i, 1);
+        }
+      }
+
+      // 更新和绘制爆发粒子
+      updateBurstParticles();
+      drawBurstParticles();
+
+      // 强拍时的闪光效果
+      if (isBeat && bass > 0.4) {
+        ctx.save();
+        ctx.fillStyle = `rgba(100, 180, 255, ${bass * 0.06})`;
+        ctx.fillRect(0, 0, width, height);
+        ctx.restore();
+      }
+    }
+
+    resize();
+    requestAnimationFrame(render);
+
+    // ==================== 事件绑定 ====================
+
+    // 文件上传
+    document.getElementById('uploadBtn').addEventListener('click', () => {
+      document.getElementById('fileInput').click();
+    });
+
+    document.getElementById('fileInput').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        playFile(file);
+      }
+    });
+
+    // 麦克风
+    document.getElementById('micBtn').addEventListener('click', toggleMic);
+
+    // 播放/暂停
+    document.getElementById('playBtn').addEventListener('click', () => {
+      if (audio.paused) {
+        audio.play();
+        isPlaying = true;
+        document.getElementById('playBtn').textContent = '暂停';
+      } else {
+        audio.pause();
+        isPlaying = false;
+        document.getElementById('playBtn').textContent = '播放';
+      }
+    });
+
+    // 进度条点击
+    document.getElementById('progressBar').addEventListener('click', (e) => {
+      if (!audio.duration) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const percent = (e.clientX - rect.left) / rect.width;
+      audio.currentTime = percent * audio.duration;
+    });
+
+    // 全屏
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+    fullscreenBtn.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen();
+      } else {
+        document.exitFullscreen();
+      }
+    });
+    document.addEventListener('fullscreenchange', () => {
+      fullscreenBtn.textContent = document.fullscreenElement ? '退出全屏' : '全屏';
+    });
+
+    // 音频结束
+    audio.addEventListener('ended', () => {
+      isPlaying = false;
+      document.getElementById('playBtn').textContent = '播放';
+    });
+  </script>
+</body>
+</html>

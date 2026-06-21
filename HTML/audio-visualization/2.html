@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>音频可视化 - Audio Visualizer</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #000;
+      overflow: hidden;
+      font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+      color: #fff;
+    }
+
+    canvas {
+      display: block;
+      position: fixed;
+      top: 0;
+      left: 0;
+    }
+
+    /* 控制面板 */
+    .controls {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      z-index: 100;
+      padding: 6px 12px;
+    }
+
+    .btn {
+      padding: 6px 14px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 400;
+      transition: all 0.2s ease;
+      background: transparent;
+      color: rgba(255, 255, 255, 0.55);
+      outline: none;
+      letter-spacing: 0.5px;
+    }
+
+    .btn:hover {
+      color: rgba(255, 255, 255, 0.9);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .btn:active {
+      color: #fff;
+    }
+
+    .btn.active {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .btn.mic-btn.active {
+      color: #7eb8ff;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.6;
+      }
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    /* 标题 */
+    .title {
+      position: fixed;
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 13px;
+      font-weight: 400;
+      letter-spacing: 8px;
+      text-transform: uppercase;
+      z-index: 100;
+      color: rgba(255, 255, 255, 0.3);
+      user-select: none;
+    }
+
+    /* 音量条 */
+    .volume-bar {
+      position: fixed;
+      right: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 3px;
+      height: 120px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 2px;
+      overflow: hidden;
+      z-index: 100;
+    }
+
+    .volume-fill {
+      position: absolute;
+      bottom: 0;
+      width: 100%;
+      background: rgba(126, 184, 255, 0.5);
+      border-radius: 2px;
+      transition: height 0.1s ease;
+    }
+
+    /* 提示文字 */
+    .hint {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 14px;
+      opacity: 0.25;
+      text-align: center;
+      z-index: 50;
+      pointer-events: none;
+      transition: opacity 0.5s ease;
+      letter-spacing: 3px;
+      font-weight: 300;
+    }
+
+    .hint.hidden {
+      opacity: 0;
+    }
+
+    /* 音频信息 */
+    .track-info {
+      position: fixed;
+      top: 55px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 12px;
+      opacity: 0;
+      z-index: 100;
+      text-align: center;
+      transition: opacity 0.5s ease;
+      color: rgba(255, 255, 255, 0.4);
+    }
+
+    .track-info.visible {
+      opacity: 1;
+    }
+
+    /* 播放进度 */
+    .progress-container {
+      position: fixed;
+      bottom: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 240px;
+      z-index: 100;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .progress-container.visible {
+      opacity: 1;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 2px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 1px;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: rgba(126, 184, 255, 0.5);
+      border-radius: 1px;
+      width: 0%;
+      transition: width 0.1s linear;
+    }
+
+    .time-display {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      opacity: 0.3;
+      margin-top: 4px;
+    }
+
+    /* 分割线 */
+    .divider {
+      width: 1px;
+      height: 14px;
+      background: rgba(255, 255, 255, 0.12);
+      margin: 0 4px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+
+  <div class="title">AUDIO VISUALIZER</div>
+  <div class="track-info" id="trackInfo"></div>
+
+  <div class="hint" id="hint">
+    请选择音频文件或开启麦克风
+  </div>
+
+  <div class="volume-bar">
+    <div class="volume-fill" id="volumeFill"></div>
+  </div>
+
+  <div class="progress-container" id="progressContainer">
+    <div class="progress-bar" id="progressBar">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+    <div class="time-display">
+      <span id="currentTime">0:00</span>
+      <span id="totalTime">0:00</span>
+    </div>
+  </div>
+
+  <div class="controls">
+    <input type="file" id="fileInput" accept="audio/*">
+    <button class="btn" id="uploadBtn">打开文件</button>
+    <button class="btn mic-btn" id="micBtn">麦克风</button>
+
+    <div class="divider"></div>
+
+    <button class="btn" id="playBtn" style="display:none;">播放</button>
+
+    <div class="divider"></div>
+
+    <button class="btn" id="fullscreenBtn">全屏</button>
+  </div>
+
+  <script>
+    // ==================== 初始化 ====================
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    let width, height, centerX, centerY;
+
+    function resize() {
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+      centerX = width / 2;
+      centerY = height / 2;
+      initStarfield();
+    }
+    window.addEventListener('resize', resize);
+
+    // ==================== 音频相关 ====================
+    let audioContext;
+    let analyser;
+    let source;
+    let audio = new Audio();
+    let dataArray;
+    let bufferLength;
+    let isPlaying = false;
+    let isMicActive = false;
+    let micStream;
+    let animationId;
+
+    // 初始化音频上下文
+    function initAudio() {
+      if (audioContext) return;
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.82;
+      bufferLength = analyser.frequencyBinCount;
+      dataArray = new Uint8Array(bufferLength);
+    }
+
+    // 播放音频文件
+    function playFile(file) {
+      initAudio();
+
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+
+      stopMic();
+
+      const url = URL.createObjectURL(file);
+      audio.src = url;
+
+      if (source) {
+        source.disconnect();
+      }
+
+      source = audioContext.createMediaElementSource(audio);
+      source.connect(analyser);
+      analyser.connect(audioContext.destination);
+
+      audio.play();
+      isPlaying = true;
+
+      document.getElementById('playBtn').style.display = 'inline-block';
+      document.getElementById('playBtn').textContent = '暂停';
+      document.getElementById('hint').classList.add('hidden');
+      document.getElementById('progressContainer').classList.add('visible');
+      document.getElementById('trackInfo').classList.add('visible');
+      document.getElementById('trackInfo').textContent = file.name.replace(/\.[^/.]+$/, '');
+
+      audio.addEventListener('loadedmetadata', () => {
+        document.getElementById('totalTime').textContent = formatTime(audio.duration);
+      });
+    }
+
+    // 使用麦克风
+    async function toggleMic() {
+      if (isMicActive) {
+        stopMic();
+        return;
+      }
+
+      initAudio();
+
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        audio.pause();
+        isPlaying = false;
+        if (source) source.disconnect();
+
+        source = audioContext.createMediaStreamSource(micStream);
+        source.connect(analyser);
+
+        isMicActive = true;
+        document.getElementById('micBtn').classList.add('active');
+        document.getElementById('hint').classList.add('hidden');
+        document.getElementById('playBtn').style.display = 'none';
+        document.getElementById('progressContainer').classList.remove('visible');
+        document.getElementById('trackInfo').classList.add('visible');
+        document.getElementById('trackInfo').textContent = '麦克风输入';
+      } catch (err) {
+        alert('无法访问麦克风，请检查权限设置。');
+        console.error(err);
+      }
+    }
+
+    function stopMic() {
+      if (micStream) {
+        micStream.getTracks().forEach(track => track.stop());
+        micStream = null;
+      }
+      isMicActive = false;
+      document.getElementById('micBtn').classList.remove('active');
+    }
+
+    // 格式化时间
+    function formatTime(seconds) {
+      if (isNaN(seconds)) return '0:00';
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60);
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    // ==================== 星空系统 ====================
+    // 三层视差星空
+    let starLayers = [[], [], []];
+    const STAR_COUNTS = [300, 200, 100]; // 远、中、近
+    const STAR_SPEEDS = [0.05, 0.15, 0.4]; // 视差速度
+    const STAR_SIZES = [[0.3, 1.0], [0.8, 1.8], [1.2, 2.8]]; // 大小范围
+
+    function initStarfield() {
+      starLayers = [[], [], []];
+      for (let layer = 0; layer < 3; layer++) {
+        for (let i = 0; i < STAR_COUNTS[layer]; i++) {
+          starLayers[layer].push({
+            x: Math.random() * width,
+            y: Math.random() * height,
+            size: Math.random() * (STAR_SIZES[layer][1] - STAR_SIZES[layer][0]) + STAR_SIZES[layer][0],
+            brightness: Math.random() * 0.6 + 0.4,
+            twinkleSpeed: Math.random() * 0.03 + 0.005,
+            twinklePhase: Math.random() * Math.PI * 2,
+            // 用于极速穿梭时的原始位置
+            baseX: 0,
+            baseY: 0
+          });
+        }
+      }
+    }
+    resize();
+
+    // 星云粒子
+    let nebulaParticles = [];
+    const NEBULA_COUNT = 80;
+
+    function initNebula() {
+      nebulaParticles = [];
+      for (let i = 0; i < NEBULA_COUNT; i++) {
+        nebulaParticles.push({
+          angle: Math.random() * Math.PI * 2,
+          radius: Math.random() * Math.min(width, height) * 0.4 + 80,
+          speed: (Math.random() - 0.5) * 0.002 + 0.0005,
+          size: Math.random() * 60 + 30,
+          hue: Math.random() * 80 + 200, // 蓝紫色调
+          opacity: Math.random() * 0.08 + 0.02
+        });
+      }
+    }
+    initNebula();
+
+    // 流星
+    let meteors = [];
+
+    function spawnMeteor(intensity) {
+      const startX = Math.random() * width;
+      const startY = Math.random() * height * 0.3;
+      const angle = Math.PI * 0.25 + (Math.random() - 0.5) * 0.3; // 斜向右下
+      const speed = 8 + intensity * 15 + Math.random() * 6;
+      const length = 40 + intensity * 80 + Math.random() * 30;
+      meteors.push({
+        x: startX,
+        y: startY,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        length: length,
+        life: 1,
+        decay: 0.008 + Math.random() * 0.008,
+        hue: 200 + Math.random() * 60,
+        width: 1.5 + Math.random() * 1.5
+      });
+    }
+
+    // 粒子（用于爆发和星座连线）
+    let particles = [];
+
+    class StarParticle {
+      constructor(x, y, vx, vy, hue, size, life) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.hue = hue;
+        this.size = size || (Math.random() * 2 + 1);
+        this.life = life || 1;
+        this.decay = Math.random() * 0.015 + 0.008;
+      }
+
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vx *= 0.985;
+        this.vy *= 0.985;
+        this.life -= this.decay;
+        this.size *= 0.995;
+      }
+
+      draw() {
+        ctx.save();
+        ctx.globalAlpha = this.life;
+        ctx.fillStyle = `hsl(${this.hue}, 80%, 70%)`;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = `hsl(${this.hue}, 90%, 60%)`;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    // 上一拍检测
+    let beatThreshold = 0.5;
+    let beatHistory = [];
+    let beatCooldown = 0;
+
+    function detectBeat(bass) {
+      beatHistory.push(bass);
+      if (beatHistory.length > 30) beatHistory.shift();
+      const avg = beatHistory.reduce((a, b) => a + b, 0) / beatHistory.length;
+      const variance = beatHistory.reduce((a, b) => a + (b - avg) ** 2, 0) / beatHistory.length;
+      const threshold = avg + Math.sqrt(variance) * 1.3;
+      if (beatCooldown > 0) {
+        beatCooldown--;
+        return false;
+      }
+      if (bass > threshold && bass > beatThreshold) {
+        beatCooldown = 8;
+        return true;
+      }
+      return false;
+    }
+
+    // ==================== 颜色工具 ====================
+    function hsl(h, s, l, a) {
+      return `hsla(${h}, ${s}%, ${l}%, ${a})`;
+    }
+
+    // ==================== 渲染函数 ====================
+
+    // 绘制视差星空
+    function drawStarfield(time, avgVolume, bass) {
+      // 极速模式时星星拉伸
+      const warpFactor = Math.max(0, avgVolume - 0.3) * 2.5;
+
+      for (let layer = 0; layer < 3; layer++) {
+        const stars = starLayers[layer];
+        const speed = STAR_SPEEDS[layer] * (1 + warpFactor * 3);
+
+        for (const star of stars) {
+          // 闪烁
+          const twinkle = Math.sin(time * star.twinkleSpeed + star.twinklePhase) * 0.3 + 0.7;
+          const alpha = star.brightness * twinkle;
+
+          // 缓慢移动（模拟飞船前进）
+          star.y += speed;
+          star.x += speed * 0.1;
+          if (star.y > height) {
+            star.y = -5;
+            star.x = Math.random() * width;
+          }
+          if (star.x > width) star.x = 0;
+
+          ctx.save();
+          ctx.globalAlpha = alpha;
+
+          if (warpFactor > 0.5 && layer === 2) {
+            // 近层星星在高音量时产生拖尾效果
+            const trailLen = warpFactor * 20;
+            const grad = ctx.createLinearGradient(star.x, star.y, star.x - speed * 2, star.y - trailLen);
+            grad.addColorStop(0, `rgba(200, 220, 255, ${alpha})`);
+            grad.addColorStop(1, 'rgba(200, 220, 255, 0)');
+            ctx.strokeStyle = grad;
+            ctx.lineWidth = star.size * 0.8;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(star.x, star.y);
+            ctx.lineTo(star.x - speed * 2, star.y - trailLen);
+            ctx.stroke();
+          }
+
+          // 星星主体
+          ctx.fillStyle = layer === 2 ? 'rgba(220, 235, 255, 1)' :
+            layer === 1 ? 'rgba(200, 220, 255, 1)' : 'rgba(180, 200, 240, 1)';
+          ctx.shadowBlur = star.size * 3;
+          ctx.shadowColor = 'rgba(180, 210, 255, 0.5)';
+          ctx.beginPath();
+          ctx.arc(star.x, star.y, star.size * (1 + bass * 0.5 * (layer === 2 ? 1 : 0.3)), 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+    }
+
+    // 绘制星云
+    function drawNebula(time, mid, treble) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      for (const np of nebulaParticles) {
+        np.angle += np.speed * (1 + mid * 2);
+        const wobble = Math.sin(time * 0.001 + np.angle * 3) * 20;
+        const x = centerX + Math.cos(np.angle) * np.radius + wobble;
+        const y = centerY + Math.sin(np.angle) * np.radius * 0.8 + wobble * 0.5;
+        const r = np.size * (1 + mid * 1.5);
+        const hueShift = treble * 30;
+
+        const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+        grad.addColorStop(0, hsl(np.hue + hueShift, 70, 50, np.opacity * (1 + mid)));
+        grad.addColorStop(0.5, hsl(np.hue + hueShift + 20, 60, 30, np.opacity * 0.5 * (1 + mid)));
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    // 绘制星系核心（脉冲星）
+    function drawGalacticCore(bass, mid, treble, time) {
+      const baseRadius = Math.min(width, height) * 0.06;
+      const coreRadius = baseRadius + bass * 80;
+
+      // 外层光晕
+      ctx.save();
+      const outerGlow = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, coreRadius * 4);
+      outerGlow.addColorStop(0, hsl(220, 80, 70, bass * 0.25));
+      outerGlow.addColorStop(0.2, hsl(250, 70, 50, bass * 0.1));
+      outerGlow.addColorStop(0.5, hsl(270, 60, 30, bass * 0.03));
+      outerGlow.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = outerGlow;
+      ctx.fillRect(0, 0, width, height);
+      ctx.restore();
+
+      // 核心光芒
+      ctx.save();
+      const coreGrad = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, coreRadius);
+      coreGrad.addColorStop(0, hsl(200, 100, 95, 0.9 + bass * 0.1));
+      coreGrad.addColorStop(0.3, hsl(220, 90, 75, 0.6 + mid * 0.2));
+      coreGrad.addColorStop(0.6, hsl(250, 80, 55, 0.3));
+      coreGrad.addColorStop(1, hsl(270, 60, 40, 0));
+      ctx.fillStyle = coreGrad;
+      ctx.shadowBlur = 40 + bass * 30;
+      ctx.shadowColor = hsl(220, 100, 70, 0.8);
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, coreRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // 旋转光环（环带）
+      const ringCount = 3;
+      for (let r = 0; r < ringCount; r++) {
+        const ringRadius = coreRadius * (1.5 + r * 0.8) + mid * 30;
+        const rotationSpeed = 0.0003 * (r % 2 === 0 ? 1 : -1);
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.rotate(time * rotationSpeed + r * 1.2);
+        ctx.strokeStyle = hsl(220 + r * 20, 70, 60, 0.15 + mid * 0.2);
+        ctx.lineWidth = 1 + r * 0.5;
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = hsl(220, 80, 60, 0.3);
+
+        // 椭圆环（星系盘效果）
+        ctx.beginPath();
+        ctx.ellipse(0, 0, ringRadius, ringRadius * 0.3, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    // 绘制频谱环（星系旋臂）
+    function drawFrequencyArms(time, bass, mid, treble) {
+      const arms = 5;
+      const baseRadius = Math.min(width, height) * 0.08;
+      const maxBarLen = Math.min(width, height) * 0.3;
+      const barsPerArm = 60;
+      const spiralTightness = 3.5;
+
+      for (let arm = 0; arm < arms; arm++) {
+        const armOffset = (arm / arms) * Math.PI * 2;
+
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.rotate(time * 0.0002 * (arm % 2 === 0 ? 1 : -1) + armOffset);
+
+        for (let i = 0; i < barsPerArm; i++) {
+          const dataIndex = Math.floor((i / barsPerArm) * (bufferLength / 2));
+          const value = dataArray[dataIndex] || 0;
+          const percent = value / 255;
+
+          // 螺旋角度
+          const t = i / barsPerArm;
+          const spiralAngle = t * spiralTightness * Math.PI;
+          const radius = baseRadius + t * maxBarLen * 0.6;
+
+          const barLength = percent * maxBarLen * 0.4 + 2;
+          const x = Math.cos(spiralAngle) * radius;
+          const y = Math.sin(spiralAngle) * radius;
+          const prevX = Math.cos(spiralAngle - 0.02) * radius;
+          const prevY = Math.sin(spiralAngle - 0.02) * radius;
+
+          const hue = 220 + t * 80 - arm * 15; // 从蓝到紫到粉
+          const saturation = 70 + percent * 20;
+          const lightness = 40 + percent * 25;
+          const alpha = percent * 0.7 + 0.1;
+
+          ctx.strokeStyle = hsl(hue, saturation, lightness, alpha);
+          ctx.lineWidth = 1.5 + percent * 2;
+          ctx.lineCap = 'round';
+          ctx.shadowBlur = 8 + percent * 10;
+          ctx.shadowColor = hsl(hue, saturation, lightness + 10, alpha * 0.5);
+
+          ctx.beginPath();
+          ctx.moveTo(prevX, prevY);
+          ctx.lineTo(x + Math.cos(spiralAngle) * barLength,
+            y + Math.sin(spiralAngle) * barLength);
+          ctx.stroke();
+
+          // 在强拍处生成粒子
+          if (percent > 0.7 && Math.random() < 0.1) {
+            const px = centerX + x + Math.cos(spiralAngle) * barLength;
+            const py = centerY + y + Math.sin(spiralAngle) * barLength;
+            const vx = Math.cos(spiralAngle) * (1 + Math.random() * 2);
+            const vy = Math.sin(spiralAngle) * (1 + Math.random() * 2);
+            particles.push(new StarParticle(px, py, vx, vy, hue, 1 + Math.random() * 2));
+          }
+        }
+        ctx.restore();
+      }
+    }
+
+    // 绘制圆形频谱（轨道圈）
+    function drawOrbitalRings(bass, mid, treble, time) {
+      const rings = 3;
+      for (let r = 0; r < rings; r++) {
+        const ringRadius = Math.min(width, height) * (0.15 + r * 0.08) + bass * 40;
+        const bars = 80 + r * 20;
+        const step = (Math.PI * 2) / bars;
+
+        ctx.save();
+        for (let i = 0; i < bars; i++) {
+          const dataIndex = Math.floor((i / bars) * bufferLength);
+          const value = dataArray[dataIndex] || 0;
+          const percent = value / 255;
+
+          // 旋转偏移
+          const rotOffset = time * 0.0002 * (r % 2 === 0 ? 1 : -1) + r * 0.5;
+          const angle = i * step + rotOffset;
+
+          const innerR = ringRadius;
+          const outerR = ringRadius + percent * 30 + 2;
+
+          const x1 = centerX + Math.cos(angle) * innerR;
+          const y1 = centerY + Math.sin(angle) * innerR;
+          const x2 = centerX + Math.cos(angle) * outerR;
+          const y2 = centerY + Math.sin(angle) * outerR;
+
+          const hue = 220 + r * 30 + (i / bars) * 40;
+          ctx.strokeStyle = hsl(hue, 80, 50 + percent * 20, percent * 0.6 + 0.1);
+          ctx.lineWidth = 1.5;
+          ctx.lineCap = 'round';
+          ctx.shadowBlur = 6;
+          ctx.shadowColor = hsl(hue, 90, 60, percent * 0.3);
+
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
+
+    // 绘制流星
+    function drawMeteors() {
+      for (let i = meteors.length - 1; i >= 0; i--) {
+        const m = meteors[i];
+        m.x += m.vx;
+        m.y += m.vy;
+        m.life -= m.decay;
+
+        if (m.life <= 0 || m.x > width + 100 || m.y > height + 100) {
+          meteors.splice(i, 1);
+          continue;
+        }
+
+        ctx.save();
+        // 流星尾迹
+        const tailX = m.x - m.vx * (m.length / Math.sqrt(m.vx * m.vx + m.vy * m.vy)) * 0.8;
+        const tailY = m.y - m.vy * (m.length / Math.sqrt(m.vx * m.vx + m.vy * m.vy)) * 0.8;
+
+        const grad = ctx.createLinearGradient(m.x, m.y, tailX, tailY);
+        grad.addColorStop(0, hsl(m.hue, 80, 80, m.life));
+        grad.addColorStop(0.3, hsl(m.hue, 70, 60, m.life * 0.5));
+        grad.addColorStop(1, hsl(m.hue, 60, 40, 0));
+
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = m.width;
+        ctx.lineCap = 'round';
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = hsl(m.hue, 90, 70, m.life * 0.6);
+        ctx.beginPath();
+        ctx.moveTo(m.x, m.y);
+        ctx.lineTo(tailX, tailY);
+        ctx.stroke();
+
+        // 流星头部亮点
+        ctx.fillStyle = hsl(m.hue, 60, 90, m.life);
+        ctx.shadowBlur = 20;
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, m.width * 1.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        // 流星经过时偶尔留下粒子
+        if (Math.random() < 0.3) {
+          particles.push(new StarParticle(
+            m.x, m.y,
+            (Math.random() - 0.5) * 2,
+            (Math.random() - 0.5) * 2,
+            m.hue,
+            Math.random() * 1.5 + 0.5,
+            0.6
+          ));
+        }
+      }
+    }
+
+    // 绘制粒子与星座连线
+    function drawParticlesAndConstellations(mid) {
+      // 星座连线
+      if (mid > 0.2) {
+        const maxDist = 100 + mid * 80;
+        const maxDistSq = maxDist * maxDist;
+        const limit = Math.min(particles.length, 60);
+        ctx.save();
+        for (let i = 0; i < limit; i++) {
+          for (let j = i + 1; j < Math.min(i + 10, limit); j++) {
+            const dx = particles[i].x - particles[j].x;
+            const dy = particles[i].y - particles[j].y;
+            const distSq = dx * dx + dy * dy;
+            if (distSq < maxDistSq) {
+              const dist = Math.sqrt(distSq);
+              ctx.strokeStyle = hsl(220, 60, 70, (1 - dist / maxDist) * mid * 0.2);
+              ctx.lineWidth = 0.5;
+              ctx.beginPath();
+              ctx.moveTo(particles[i].x, particles[i].y);
+              ctx.lineTo(particles[j].x, particles[j].y);
+              ctx.stroke();
+            }
+          }
+        }
+        ctx.restore();
+      }
+
+      // 更新和绘制粒子
+      for (let i = particles.length - 1; i >= 0; i--) {
+        particles[i].update();
+        particles[i].draw();
+        if (particles[i].life <= 0) {
+          particles.splice(i, 1);
+        }
+      }
+
+      // 限制粒子数量
+      if (particles.length > 150) {
+        particles = particles.slice(-150);
+      }
+    }
+
+    // ==================== 主渲染循环 ====================
+    function render(time) {
+      animationId = requestAnimationFrame(render);
+
+      // 清屏（带拖影效果，模拟深空）
+      ctx.fillStyle = 'rgba(2, 3, 12, 0.2)';
+      ctx.fillRect(0, 0, width, height);
+
+      // 获取音频数据
+      let bass = 0, mid = 0, treble = 0, avgVolume = 0;
+
+      if (analyser) {
+        analyser.getByteFrequencyData(dataArray);
+
+        let bSum = 0, mSum = 0, tSum = 0, total = 0;
+        const bEnd = Math.floor(bufferLength * 0.1);
+        const mEnd = Math.floor(bufferLength * 0.45);
+
+        for (let i = 0; i < bufferLength; i++) {
+          const v = dataArray[i] / 255;
+          total += v;
+          if (i < bEnd) bSum += v;
+          else if (i < mEnd) mSum += v;
+          else tSum += v;
+        }
+
+        bass = bSum / bEnd;
+        mid = mSum / (mEnd - bEnd);
+        treble = tSum / (bufferLength - mEnd);
+        avgVolume = total / bufferLength;
+      } else {
+        // 无音频时的默认安静动画
+        const bLen = 128;
+        if (!dataArray || dataArray.length !== bLen) {
+          dataArray = new Uint8Array(bLen);
+          bufferLength = bLen;
+        }
+        for (let i = 0; i < bLen; i++) {
+          dataArray[i] = (Math.sin(time * 0.001 + i * 0.15) * 15 + 20 + Math.sin(time * 0.0005 + i * 0.05) * 10);
+        }
+        bass = Math.sin(time * 0.001) * 0.1 + 0.15;
+        mid = Math.sin(time * 0.0015) * 0.08 + 0.12;
+        treble = Math.sin(time * 0.002) * 0.05 + 0.1;
+        avgVolume = 0.15;
+      }
+
+      // 检测节拍
+      const isBeat = detectBeat(bass);
+
+      // 节拍触发流星和爆发
+      if (isBeat && bass > 0.45) {
+        spawnMeteor(bass);
+        // 核心爆发粒子
+        const burstCount = Math.floor(bass * 15) + 5;
+        for (let i = 0; i < burstCount; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = 2 + bass * 6 + Math.random() * 3;
+          const hue = 200 + Math.random() * 80;
+          const p = new StarParticle(
+            centerX, centerY,
+            Math.cos(angle) * speed,
+            Math.sin(angle) * speed,
+            hue,
+            1.5 + Math.random() * 2,
+            0.8 + Math.random() * 0.4
+          );
+          particles.push(p);
+        }
+      }
+
+      // 随机流星
+      if (Math.random() < 0.005 + avgVolume * 0.02) {
+        spawnMeteor(avgVolume);
+      }
+
+      // 绘制顺序：星空 → 星云 → 星系核心 → 轨道环 → 旋臂频谱 → 流星 → 粒子/星座
+      drawStarfield(time, avgVolume, bass);
+      drawNebula(time, mid, treble);
+      drawGalacticCore(bass, mid, treble, time);
+      drawOrbitalRings(bass, mid, treble, time);
+      drawFrequencyArms(time, bass, mid, treble);
+      drawMeteors();
+      drawParticlesAndConstellations(mid);
+
+      // 更新音量条
+      const fill = document.getElementById('volumeFill');
+      if (fill) {
+        fill.style.height = `${Math.min(avgVolume * 100 * 3, 100)}%`;
+      }
+
+      // 更新进度条
+      if (!isMicActive && audio.duration) {
+        const progress = (audio.currentTime / audio.duration) * 100;
+        document.getElementById('progressFill').style.width = `${progress}%`;
+        document.getElementById('currentTime').textContent = formatTime(audio.currentTime);
+      }
+    }
+
+    // ==================== 事件绑定 ====================
+
+    // 文件上传
+    document.getElementById('uploadBtn').addEventListener('click', () => {
+      document.getElementById('fileInput').click();
+    });
+
+    document.getElementById('fileInput').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        playFile(file);
+      }
+    });
+
+    // 麦克风
+    document.getElementById('micBtn').addEventListener('click', toggleMic);
+
+    // 播放/暂停
+    document.getElementById('playBtn').addEventListener('click', () => {
+      if (isPlaying) {
+        audio.pause();
+        isPlaying = false;
+        document.getElementById('playBtn').textContent = '播放';
+      } else {
+        audio.play();
+        isPlaying = true;
+        document.getElementById('playBtn').textContent = '暂停';
+      }
+    });
+
+    audio.addEventListener('ended', () => {
+      isPlaying = false;
+      document.getElementById('playBtn').textContent = '播放';
+    });
+
+    // 进度条点击跳转
+    document.getElementById('progressBar').addEventListener('click', (e) => {
+      if (!audio.duration) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const percent = (e.clientX - rect.left) / rect.width;
+      audio.currentTime = percent * audio.duration;
+    });
+
+    // 拖拽文件
+    document.addEventListener('dragover', (e) => {
+      e.preventDefault();
+    });
+
+    document.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith('audio/')) {
+        playFile(file);
+      }
+    });
+
+    // 全屏切换
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => { });
+        fullscreenBtn.textContent = '退出全屏';
+      } else {
+        document.exitFullscreen();
+        fullscreenBtn.textContent = '全屏';
+      }
+    }
+
+    fullscreenBtn.addEventListener('click', toggleFullscreen);
+
+    document.addEventListener('fullscreenchange', () => {
+      fullscreenBtn.textContent = document.fullscreenElement ? '退出全屏' : '全屏';
+    });
+
+    // 键盘快捷键
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (!isMicActive && audio.src) {
+          document.getElementById('playBtn').click();
+        }
+      } else if (e.code === 'KeyF') {
+        toggleFullscreen();
+      }
+    });
+
+    // 启动渲染
+    render(0);
+  </script>
+</body>
+</html>
