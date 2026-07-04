@@ -205,17 +205,6 @@
       margin: 0 4px;
     }
 
-    /* 震动效果 */
-    .shake {
-      animation: shake 0.15s ease-out;
-    }
-
-    @keyframes shake {
-      0%, 100% { transform: translate(0, 0); }
-      25% { transform: translate(-3px, 2px); }
-      50% { transform: translate(2px, -3px); }
-      75% { transform: translate(-2px, -1px); }
-    }
   </style>
 </head>
 <body>
@@ -737,12 +726,6 @@
             speed: 10 + Math.random() * 12 + bass * 8,
             hue: hue
           }));
-        }
-
-        // 屏幕微震
-        if (bass > 0.5) {
-          document.body.classList.add('shake');
-          setTimeout(() => document.body.classList.remove('shake'), 150);
         }
       }
 
