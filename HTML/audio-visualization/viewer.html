@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>音频可视化</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: #111;
+      overflow: hidden;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 4px;
+      width: 100vw;
+      height: 100vh;
+      background: #000;
+    }
+
+    .cell {
+      position: relative;
+      background: #111;
+      overflow: hidden;
+    }
+
+    .cell iframe {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+    }
+
+    .cell select {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      z-index: 10;
+      background: rgba(0, 0, 0, 0.6);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-size: 12px;
+      cursor: pointer;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.2s, visibility 0.2s;
+    }
+
+    .cell:hover select {
+      opacity: 1;
+      visibility: visible;
+    }
+  </style>
+</head>
+<body>
+  <div class="grid" id="grid"></div>
+  <script>
+    // 可供选择的页面列表
+    const pages = [
+      '1.html', '2.html', '3.html', '4.html',
+      '5.html', '6.html', '7.html', '8.html',
+    ];
+
+    // 4 个格子默认显示的页面
+    const defaults = ['2.html', '6.html', '7.html', '8.html'];
+
+    const grid = document.getElementById('grid');
+
+    defaults.forEach((current) => {
+
+      const cell = document.createElement('div');
+
+      cell.className = 'cell';
+
+      const iframe = document.createElement('iframe');
+
+      iframe.src = current;
+
+      const select = document.createElement('select');
+
+      pages.forEach((p) => {
+        const opt = document.createElement('option');
+        opt.value = p;
+        opt.textContent = p;
+        if (p === current) opt.selected = true;
+        select.appendChild(opt);
+      });
+
+      // 切换时更新对应 iframe
+      select.addEventListener('change', () => { iframe.src = select.value; });
+
+      cell.appendChild(select);
+      cell.appendChild(iframe);
+      grid.appendChild(cell);
+
+    });
+  </script>
+</body>
+</html>
