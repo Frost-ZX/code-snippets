@@ -792,47 +792,8 @@
       }
     }
 
-    // ==================== 扫描环（速度感环） ====================
-    let rings = [];
-
-    function spawnRing() {
-      rings.push({
-        radius: 10,
-        maxRadius: Math.max(width, height) * 0.8,
-        life: 1,
-        decay: 0.008,
-        hue: 200 + Math.random() * 20,
-        width: 2 + Math.random() * 2
-      });
-    }
-
-    function updateAndDrawRings(bass) {
-      for (let i = rings.length - 1; i >= 0; i--) {
-        const r = rings[i];
-        r.radius += 8 + bass * 15;
-        r.life -= r.decay;
-
-        if (r.life <= 0 || r.radius > r.maxRadius) {
-          rings.splice(i, 1);
-          continue;
-        }
-
-        ctx.save();
-        ctx.globalAlpha = r.life * 0.3;
-        ctx.strokeStyle = `hsl(${r.hue}, 15%, 70%)`;
-        ctx.lineWidth = r.width * r.life;
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = 'rgba(255, 255, 255, 0.4)';
-        ctx.beginPath();
-        ctx.arc(cx, cy, r.radius, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
-      }
-    }
-
     // ==================== 主渲染循环 ====================
     let lastTime = 0;
-    let ringTimer = 0;
     let warpLineTimer = 0;
     let speedValue = 0;
 
@@ -898,20 +859,6 @@
         spawnWarpLines(Math.floor(8 + bass * 15), 1 + bass);
       }
       updateAndDrawWarpLines(bass, treble);
-
-      // 生成和绘制扫描环（无声音时不生成）
-      if (avg > 0.03) {
-        ringTimer += dt;
-        const ringInterval = Math.max(200, 800 - avg * 500 - bass * 300);
-        if (ringTimer > ringInterval) {
-          ringTimer = 0;
-          spawnRing();
-        }
-        if (isBeat && bass > 0.4) {
-          spawnRing();
-        }
-      }
-      updateAndDrawRings(bass);
 
       // 节拍粒子爆发
       if (isBeat && bass > 0.3) {
