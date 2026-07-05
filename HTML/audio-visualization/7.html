@@ -360,7 +360,7 @@ function drawGrid(time) {
 function drawSkyline() {
   if (!freqArray) return;
   const binCount = analyser.frequencyBinCount;
-  const usable = Math.floor(binCount * 0.6);
+  const usable = binCount; // 覆盖全部频段，保留高频
   const barCount = 80;
   const barW = W / barCount;
   const baseY = H * 0.9;

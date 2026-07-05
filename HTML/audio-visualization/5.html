@@ -895,7 +895,7 @@ function drawFreqBars(high) {
   const gap = W / barCount * 0.4;
 
   for (let i = 0; i < barCount; i++) {
-    const freqIdx = Math.floor(i / barCount * (freqData.length * 0.6));
+    const freqIdx = Math.floor(i / barCount * (freqData.length - 1)); // 覆盖全部频段，保留高频
     const val = freqData[freqIdx] / 255;
     const barH = val * H * 0.35;
     const x = i * (barWidth + gap) + gap * 0.5;

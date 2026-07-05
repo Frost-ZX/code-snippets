@@ -311,7 +311,7 @@
     function drawSpectrum(x, y, w, h) {
       ctx.save();
       const bars = 64;
-      const step = Math.floor(freqData.length / 2 / bars);
+      const step = Math.floor(freqData.length / bars); // 覆盖全部 bin，保留高频
       const bw = w / bars;
       if (peakHold.length !== bars) peakHold = new Array(bars).fill(0);
 

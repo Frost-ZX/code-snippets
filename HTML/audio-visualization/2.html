@@ -204,7 +204,7 @@
       // 对数分布采样索引，低频更细腻
       function buildBands(bins) {
         const bands = [];
-        const minF = 2, maxF = bins * 0.72;
+        const minF = 2, maxF = bins; // 覆盖全部 bin，保留高频
         for (let i = 0; i <= BAR_COUNT; i++) {
           const t = i / BAR_COUNT;
           bands.push(Math.floor(minF * Math.pow(maxF / minF, t)));
