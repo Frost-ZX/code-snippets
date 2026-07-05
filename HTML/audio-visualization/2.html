@@ -31,8 +31,8 @@
       width: 100%;
       height: 100%;
       /* 模拟玻璃外壳与暗角 */
-      background:
-        radial-gradient(ellipse at center, #061715 0%, var(--vfd-bg) 70%, #000 100%);
+      background: radial-gradient(ellipse at center, #061715 0%, var(--vfd-bg) 70%, #000 100%);
+      filter: brightness(1.5);
     }
 
     canvas {
@@ -136,7 +136,8 @@
 
       // VFD 荧光主色
       const GLOW = "#38f9d7";
-      const DIM = "rgba(56, 249, 215, 0.14)";
+      const DIM_1 = "rgba(56, 249, 215, 0.14)";
+      const DIM_2 = "rgba(56, 249, 215, 0.5)";
 
       let W = 0, H = 0, DPR = 1;
 
@@ -234,21 +235,26 @@
       // 屏幕布局参数
       function layout() {
         const pad = Math.max(24, W * 0.04);
+        const panelW = Math.max(180, W * 0.18);   // 右侧文字面板宽度
+        const panelX = W - pad - panelW;          // 右侧面板左边界
+        const contentRight = panelX - 24;         // 频谱/波形右边界
+        const contentW = contentRight - pad;      // 频谱/波形可用宽度
         const specTop = pad + 46;
         const specH = H * 0.40;
         const specBottom = specTop + specH;
         const reflectH = specH * 0.20;         // 频谱倒影高度
         const waveTop = specBottom + reflectH + 30;
         const waveH = H * 0.14;
-        const statusY = H - pad * 0.5 - 34;    // 底部状态栏基线
-        return { pad, specTop, specH, specBottom, reflectH, waveTop, waveH, statusY };
+        const statusTop = specTop;             // 右侧状态栏顶部
+        const statusH = H - statusTop - pad - 60; // 状态栏高度（预留底部按钮空间）
+        return { pad, panelW, panelX, contentRight, contentW, specTop, specH, specBottom, reflectH, waveTop, waveH, statusTop, statusH };
       }
 
       // 外框 + 标题（纯文字标签，营造仪器面板感）
       function drawFrame() {
         const { pad } = layout();
         ctx.save();
-        ctx.strokeStyle = DIM;
+        ctx.strokeStyle = DIM_1;
         ctx.lineWidth = 1;
         ctx.strokeRect(pad * 0.5, pad * 0.5, W - pad, H - pad);
 
@@ -269,8 +275,8 @@
 
       // 分段式频谱条（VFD 经典分段柱）
       function drawSpectrum() {
-        const { pad, specTop, specH, specBottom, reflectH } = layout();
-        const usableW = W - pad * 2;
+        const { pad, contentW, specTop, specH, specBottom, reflectH } = layout();
+        const usableW = contentW;
         const gap = usableW / BAR_COUNT * 0.22;
         const barW = usableW / BAR_COUNT - gap;
         const segGap = 2;
@@ -318,7 +324,7 @@
               ctx.globalAlpha = isPeak ? 1 : 0.92;
             } else {
               // 未点亮段：暗格（VFD 空段的微弱残影）
-              ctx.fillStyle = DIM;
+              ctx.fillStyle = DIM_1;
               ctx.shadowBlur = 0;
               ctx.globalAlpha = 1;
             }
@@ -344,17 +350,17 @@
 
       // 底部波形（示波器式点阵）
       function drawWaveform() {
-        const { pad, waveTop, waveH } = layout();
-        const usableW = W - pad * 2;
+        const { pad, contentRight, contentW, waveTop, waveH } = layout();
+        const usableW = contentW;
         const mid = waveTop + waveH / 2;
 
         ctx.save();
         // 中线
-        ctx.strokeStyle = DIM;
+        ctx.strokeStyle = DIM_1;
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(pad, mid);
-        ctx.lineTo(W - pad, mid);
+        ctx.lineTo(contentRight, mid);
         ctx.stroke();
 
         ctx.strokeStyle = GLOW;
@@ -398,7 +404,7 @@
           let color = GLOW;
           if (s / segs > 0.8) color = "#ff5b6b";
           else if (s / segs > 0.6) color = "#ffd24a";
-          ctx.fillStyle = on ? color : DIM;
+          ctx.fillStyle = on ? color : DIM_1;
           ctx.shadowColor = color;
           ctx.shadowBlur = on ? 10 : 0;
           ctx.fillRect(sx, y, barW / segs - 3, barH);
@@ -427,10 +433,9 @@
         return maxI * sampleRate / analyser.fftSize;
       }
 
-      // 底部数字状态栏（时钟 / 主频 / 音符 / dB），纯文字仪表读数
+      // 右侧数字状态栏（时钟 / 主频 / 音符 / dB），纵向排列的纯文字仪表读数
       function drawStatusBar() {
-        const { pad, statusY } = layout();
-        const usableW = W - pad * 2;
+        const { pad, panelX, panelW, statusTop, statusH } = layout();
 
         // RMS → dB
         let db = -Infinity;
@@ -457,29 +462,30 @@
         ];
 
         ctx.save();
-        // 分隔线
-        ctx.strokeStyle = DIM;
+        // 左侧分隔竖线
+        ctx.strokeStyle = DIM_1;
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(pad, statusY - 8);
-        ctx.lineTo(W - pad, statusY - 8);
+        ctx.moveTo(panelX - 12, statusTop);
+        ctx.lineTo(panelX - 12, statusTop + statusH);
         ctx.stroke();
 
         ctx.textBaseline = "top";
-        const cellW = (usableW * 0.78) / cells.length;   // 右侧留白给操作按钮
+        ctx.textAlign = "left";
+        const cellH = statusH / cells.length;    // 每项纵向占位
         cells.forEach((c, i) => {
-          const cx = pad + i * cellW;
+          const cy = statusTop + i * cellH;
           // 标签
-          ctx.font = "11px Consolas, monospace";
-          ctx.fillStyle = DIM;
+          ctx.font = "13px Consolas, monospace";
+          ctx.fillStyle = DIM_2;
           ctx.shadowBlur = 0;
-          ctx.fillText(c[0], cx, statusY);
-          // 数值
-          ctx.font = "600 18px Consolas, monospace";
+          ctx.fillText(c[0], panelX, cy);
+          // 数值（放大字号）
+          ctx.font = "600 30px Consolas, monospace";
           ctx.fillStyle = GLOW;
           ctx.shadowColor = GLOW;
-          ctx.shadowBlur = 10;
-          ctx.fillText(c[1], cx, statusY + 14);
+          ctx.shadowBlur = 12;
+          ctx.fillText(c[1], panelX, cy + 18);
         });
         ctx.restore();
       }
