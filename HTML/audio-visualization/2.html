@@ -269,7 +269,7 @@
           audioCtx = new (window.AudioContext || window.webkitAudioContext)();
           const src = audioCtx.createMediaStreamSource(stream);
           analyser = audioCtx.createAnalyser();
-          analyser.fftSize = 512;
+          analyser.fftSize = 512; // 影响音符识别，值为 4096 时效果较好
           analyser.smoothingTimeConstant = 0.8;
           analyser.minDecibels = -85;   // 拓宽动态范围，避免频谱条轻易撑满
           analyser.maxDecibels = -10;
