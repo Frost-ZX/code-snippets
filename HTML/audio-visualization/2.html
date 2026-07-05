@@ -10,6 +10,11 @@
       --vfd-glow: #38f9d7;
       --vfd-dim: #0a6b5c;
       --vfd-bg: #030807;
+      /* 与 canvas layout() 中的 pad / panelW 保持一致，供右侧 HTML 面板定位 */
+      --pad: max(24px, 4vw);
+      --panelW: max(180px, 18vw);
+      --vfd-dim-1: rgba(56, 249, 215, 0.14);
+      --vfd-dim-2: rgba(56, 249, 215, 0.5);
     }
 
     * {
@@ -111,6 +116,72 @@
       text-align: center;
       transition: opacity .4s;
     }
+
+    /* 右侧数字状态面板（HTML 形式，替代原 canvas 绘制） */
+    #statusPanel {
+      position: absolute;
+      top: calc(var(--pad) + 46px);
+      right: var(--pad);
+      bottom: calc(var(--pad) + 60px);
+      width: var(--panelW);
+      padding-left: 14px;
+      border-left: 1px solid var(--vfd-dim-1);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      z-index: 10;
+      pointer-events: none;
+      color: var(--vfd-glow);
+    }
+
+    .stat {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .stat-label {
+      font-size: 13px;
+      letter-spacing: 1px;
+      color: var(--vfd-dim-2);
+    }
+
+    .stat-value {
+      font-size: 30px;
+      font-weight: 600;
+      line-height: 1;
+      color: var(--vfd-glow);
+      text-shadow: 0 0 12px var(--vfd-glow);
+    }
+
+    /* NOTE 音名 / 八度网格 */
+    .note-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 4px 2px;
+      margin-top: 4px;
+    }
+
+    .oct-grid {
+      display: grid;
+      grid-template-columns: repeat(9, 1fr);
+      gap: 2px;
+      margin-top: 6px;
+    }
+
+    .note-cell,
+    .oct-cell {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--vfd-dim-1);
+      transition: color .1s, text-shadow .1s;
+    }
+
+    .note-cell.active,
+    .oct-cell.active {
+      color: var(--vfd-glow);
+      text-shadow: 0 0 14px var(--vfd-glow);
+    }
   </style>
 </head>
 <body>
@@ -118,6 +189,31 @@
     <canvas id="vfd"></canvas>
     <div id="scanlines"></div>
     <div id="hint">按下 MIC 授权麦克风以开始</div>
+    <!-- 右侧数字状态面板（HTML） -->
+    <div id="statusPanel">
+      <div class="stat">
+        <span class="stat-label">TIME</span>
+        <span class="stat-value" id="stTime">--:--:--</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">PEAK (Hz)</span>
+        <span class="stat-value" id="stPeak">---</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">NOTE</span>
+        <div class="note-grid" id="stNoteGrid"></div>
+        <span class="stat-label" style="margin-top:8px">OCT</span>
+        <div class="oct-grid" id="stOctGrid"></div>
+      </div>
+      <div class="stat">
+        <span class="stat-label">LEVEL (dB)</span>
+        <span class="stat-value" id="stLevel">-inf</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">FFT</span>
+        <span class="stat-value" id="stFft">----</span>
+      </div>
+    </div>
     <div id="controls">
       <button class="btn" id="micBtn">MIC</button>
       <button class="btn" id="fsBtn">FULL SCREEN</button>
@@ -133,6 +229,14 @@
       const micBtn = document.getElementById("micBtn");
       const fsBtn = document.getElementById("fsBtn");
       const hint = document.getElementById("hint");
+
+      // 右侧状态面板 HTML 元素
+      const elTime = document.getElementById("stTime");
+      const elPeak = document.getElementById("stPeak");
+      const elLevel = document.getElementById("stLevel");
+      const elFft = document.getElementById("stFft");
+      const elNoteGrid = document.getElementById("stNoteGrid");
+      const elOctGrid = document.getElementById("stOctGrid");
 
       // VFD 荧光主色
       const GLOW = "#38f9d7";
@@ -154,6 +258,7 @@
 
       // ---------- 音频 ----------
       let audioCtx = null, analyser = null, freqData = null, timeData = null;
+      let micStream = null;     // 保存麦克风流以便关闭时停止音轨
       let running = false;
       let sampleRate = 44100;   // 采样率，用于频率/音符换算
 
@@ -172,6 +277,7 @@
           sampleRate = audioCtx.sampleRate;
           freqData = new Uint8Array(analyser.frequencyBinCount);
           timeData = new Uint8Array(analyser.fftSize);
+          micStream = stream;
           running = true;
           micBtn.classList.add("active");
           hint.style.opacity = "0";
@@ -181,7 +287,29 @@
         }
       }
 
-      micBtn.addEventListener("click", initMic);
+      // 关闭麦克风：停止音轨、释放音频上下文并复位状态
+      function stopMic() {
+        if (!running) return;
+        if (micStream) {
+          micStream.getTracks().forEach(t => t.stop());
+          micStream = null;
+        }
+        if (audioCtx) {
+          audioCtx.close();
+          audioCtx = null;
+        }
+        analyser = null;
+        running = false;
+        micBtn.classList.remove("active");
+        hint.textContent = "按下 MIC 授权麦克风以开始";
+        hint.style.opacity = "1";
+      }
+
+      // 点击 MIC：在开启 / 关闭之间切换
+      micBtn.addEventListener("click", () => {
+        if (running) stopMic();
+        else initMic();
+      });
 
       // ---------- 全屏 ----------
       fsBtn.addEventListener("click", () => {
@@ -229,7 +357,7 @@
         drawSpectrum();
         drawWaveform();
         drawLevelMeter();
-        drawStatusBar();
+        updateStatusPanel();
       }
 
       // 屏幕布局参数
@@ -433,10 +561,27 @@
         return maxI * sampleRate / analyser.fftSize;
       }
 
-      // 右侧数字状态栏（时钟 / 主频 / 音符 / dB），纵向排列的纯文字仪表读数
-      function drawStatusBar() {
-        const { pad, panelX, panelW, statusTop, statusH } = layout();
+      // 可显示的八度范围
+      const OCTAVES = [0, 1, 2, 3, 4, 5, 6, 7, 8];
 
+      // 初始化 NOTE / OCT 网格单元（一次性创建，之后仅切换 active 类）
+      const noteCells = NOTE_NAMES.map(name => {
+        const el = document.createElement("span");
+        el.className = "note-cell";
+        el.textContent = name;
+        elNoteGrid.appendChild(el);
+        return el;
+      });
+      const octCells = OCTAVES.map(o => {
+        const el = document.createElement("span");
+        el.className = "oct-cell";
+        el.textContent = o;
+        elOctGrid.appendChild(el);
+        return el;
+      });
+
+      // 更新右侧 HTML 状态面板（时钟 / 主频 / 音符 / dB / FFT）
+      function updateStatusPanel() {
         // RMS → dB
         let db = -Infinity;
         if (running) {
@@ -450,44 +595,23 @@
         }
 
         const f = dominantFreq();
-        const now = new Date();
-        const clock = now.toTimeString().slice(0, 8);
 
-        const cells = [
-          ["TIME", clock],
-          ["PEAK", f > 0 ? f.toFixed(0) + " Hz" : "--- Hz"],
-          ["NOTE", running ? freqToNote(f) : "--"],
-          ["LEVEL", isFinite(db) ? db.toFixed(1) + " dB" : "-inf dB"],
-          ["FFT", running ? analyser.fftSize + "" : "----"]
-        ];
+        // 当前主频对应的半音索引（0-11）与八度，无信号时为 -1
+        let activeNote = -1, activeOctave = -99;
+        if (running && f > 0) {
+          const nn = Math.round(12 * Math.log2(f / 440) + 69);
+          activeNote = ((nn % 12) + 12) % 12;
+          activeOctave = Math.floor(nn / 12) - 1;
+        }
 
-        ctx.save();
-        // 左侧分隔竖线
-        ctx.strokeStyle = DIM_1;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(panelX - 12, statusTop);
-        ctx.lineTo(panelX - 12, statusTop + statusH);
-        ctx.stroke();
+        elTime.textContent = new Date().toTimeString().slice(0, 8);
+        elPeak.textContent = f > 0 ? f.toFixed(0) : "---";
+        elLevel.textContent = isFinite(db) ? db.toFixed(1) : "-inf";
+        elFft.textContent = running ? analyser.fftSize + "" : "----";
 
-        ctx.textBaseline = "top";
-        ctx.textAlign = "left";
-        const cellH = statusH / cells.length;    // 每项纵向占位
-        cells.forEach((c, i) => {
-          const cy = statusTop + i * cellH;
-          // 标签
-          ctx.font = "13px Consolas, monospace";
-          ctx.fillStyle = DIM_2;
-          ctx.shadowBlur = 0;
-          ctx.fillText(c[0], panelX, cy);
-          // 数值（放大字号）
-          ctx.font = "600 30px Consolas, monospace";
-          ctx.fillStyle = GLOW;
-          ctx.shadowColor = GLOW;
-          ctx.shadowBlur = 12;
-          ctx.fillText(c[1], panelX, cy + 18);
-        });
-        ctx.restore();
+        // 高亮当前音符与八度
+        noteCells.forEach((el, i) => el.classList.toggle("active", i === activeNote));
+        octCells.forEach((el, i) => el.classList.toggle("active", OCTAVES[i] === activeOctave));
       }
 
       draw();
