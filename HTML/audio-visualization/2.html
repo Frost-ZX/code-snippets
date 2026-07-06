@@ -182,6 +182,27 @@
       color: var(--vfd-glow);
       text-shadow: 0 0 14px var(--vfd-glow);
     }
+
+    /* FFT 数值可用鼠标滚轮调整：需重新开启指针事件并给出可交互提示 */
+    #stFft {
+      pointer-events: auto;
+      cursor: ns-resize;
+      user-select: none;
+    }
+
+    /* 悬浮时以 1s 为周期循环闪烁，提示该数值可交互 */
+    #stFft:hover {
+      animation: fftBlink 1s ease-in-out infinite;
+    }
+
+    @keyframes fftBlink {
+      0%, 100% {
+        opacity: 1;
+      }
+      50% {
+        opacity: 0.25;
+      }
+    }
   </style>
 </head>
 <body>
@@ -262,6 +283,10 @@
       let running = false;
       let sampleRate = 44100;   // 采样率，用于频率/音符换算
 
+      // 当前 FFT 大小（可用鼠标滚轮在 FFT 数值上调整），128 ~ 8192 之间的 2 的幂
+      const FFT_MIN = 128, FFT_MAX = 8192;
+      let fftSize = 512;        // 影响音符识别，值为 4096 时效果较好
+
       async function initMic() {
         if (running) return;
         try {
@@ -269,7 +294,7 @@
           audioCtx = new (window.AudioContext || window.webkitAudioContext)();
           const src = audioCtx.createMediaStreamSource(stream);
           analyser = audioCtx.createAnalyser();
-          analyser.fftSize = 512; // 影响音符识别，值为 4096 时效果较好
+          analyser.fftSize = fftSize;
           analyser.smoothingTimeConstant = 0.8;
           analyser.minDecibels = -85;   // 拓宽动态范围，避免频谱条轻易撑满
           analyser.maxDecibels = -10;
@@ -310,6 +335,27 @@
         if (running) stopMic();
         else initMic();
       });
+
+      // 应用新的 FFT 大小：限制在 [128, 8192] 的 2 的幂之间，运行中则实时生效
+      function applyFftSize(next) {
+        next = Math.min(FFT_MAX, Math.max(FFT_MIN, next));
+        if (next === fftSize) return;
+        fftSize = next;
+        if (running && analyser) {
+          analyser.fftSize = fftSize;
+          // fftSize 变化后需重建数据缓冲区与频段索引
+          freqData = new Uint8Array(analyser.frequencyBinCount);
+          timeData = new Uint8Array(analyser.fftSize);
+          bands = null;
+        }
+        elFft.textContent = fftSize + "";
+      }
+
+      // 鼠标在 FFT 数值上滚动：向上放大 1 倍，向下缩小 1/2
+      elFft.addEventListener("wheel", (e) => {
+        e.preventDefault();
+        applyFftSize(e.deltaY < 0 ? fftSize * 2 : fftSize / 2);
+      }, { passive: false });
 
       // ---------- 全屏 ----------
       fsBtn.addEventListener("click", () => {
@@ -607,7 +653,7 @@
         elTime.textContent = new Date().toTimeString().slice(0, 8);
         elPeak.textContent = f > 0 ? f.toFixed(0) : "---";
         elLevel.textContent = isFinite(db) ? db.toFixed(1) : "-inf";
-        elFft.textContent = running ? analyser.fftSize + "" : "----";
+        elFft.textContent = fftSize + "";
 
         // 高亮当前音符与八度
         noteCells.forEach((el, i) => el.classList.toggle("active", i === activeNote));
