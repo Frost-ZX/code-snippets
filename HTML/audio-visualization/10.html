@@ -1,0 +1,1350 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>音频可视化</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+      background: #06080b;
+      color: #f4f7f8;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      min-width: 320px;
+      min-height: 100vh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      overflow-x: hidden;
+      background:
+        linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+        radial-gradient(circle at 50% 35%, #293038 0, #101419 38%, #050608 80%);
+      background-size: 32px 32px, 32px 32px, auto;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      color: inherit;
+    }
+
+    .player {
+      width: min(1040px, calc(100vw - 32px));
+      margin: 24px auto;
+      overflow: hidden;
+      border: 1px solid #69717a;
+      border-radius: 8px;
+      background: #171c21;
+      box-shadow:
+        0 32px 80px rgba(0, 0, 0, 0.62),
+        inset 0 1px rgba(255, 255, 255, 0.5);
+    }
+
+    .titlebar {
+      height: 38px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 14px;
+      color: #101417;
+      font-size: 13px;
+      font-weight: 600;
+      background: linear-gradient(#eff2f4, #aeb5bc 52%, #929aa2 53%, #c0c6cb);
+      border-bottom: 1px solid #0d1115;
+      text-shadow: 0 1px rgba(255, 255, 255, 0.55);
+    }
+
+    .app-mark {
+      width: 18px;
+      height: 18px;
+      position: relative;
+      flex: 0 0 auto;
+      border-radius: 50%;
+      background: conic-gradient(from 20deg, #56c7ec, #1d6cb3 42%, #6cbd43 43%, #bddb4d 66%, #f4a92b 67%, #56c7ec);
+      box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.72), 0 1px 2px #52585e;
+    }
+
+    .app-mark::after {
+      content: "";
+      position: absolute;
+      inset: 5px 4px 5px 7px;
+      clip-path: polygon(0 0, 100% 50%, 0 100%);
+      background: white;
+    }
+
+    .titlebar span:last-child {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .stage {
+      position: relative;
+      aspect-ratio: 16 / 8.7;
+      min-height: 320px;
+      background: #020507;
+      border: 9px solid #252c32;
+      border-top-color: #11161a;
+      border-bottom-color: #4b535a;
+      box-shadow: inset 0 0 0 1px #000;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .display-info {
+      position: absolute;
+      inset: 16px 18px auto;
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      pointer-events: none;
+      color: rgba(223, 247, 255, 0.72);
+      font-family: Consolas, monospace;
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+
+    .fullscreen-button {
+      min-width: 76px;
+      height: 34px;
+      position: absolute;
+      right: 14px;
+      bottom: 14px;
+      z-index: 2;
+      display: grid;
+      place-items: center;
+      padding: 0 12px;
+      border: 1px solid rgba(150, 211, 225, 0.48);
+      border-radius: 3px;
+      background: rgba(5, 16, 21, 0.72);
+      color: #d9f7ff;
+      font: 12px/1 "Segoe UI", "Microsoft YaHei", sans-serif;
+      cursor: pointer;
+      opacity: 0.68;
+      transition: opacity 140ms ease, border-color 140ms ease, background 140ms ease;
+    }
+
+    .fullscreen-button:hover {
+      opacity: 1;
+      border-color: #6dddf4;
+      background: rgba(13, 64, 79, 0.9);
+    }
+
+    .stage:fullscreen,
+    .stage:-webkit-full-screen {
+      width: 100vw;
+      height: 100vh;
+      min-height: 100vh;
+      aspect-ratio: auto;
+      border: 0;
+      background: #020507;
+    }
+
+    .stage:fullscreen .fullscreen-button,
+    .stage:-webkit-full-screen .fullscreen-button {
+      right: 20px;
+      bottom: 20px;
+    }
+
+    .mode-switcher {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 1px;
+      padding: 5px;
+      background: #0d1115;
+      border-top: 1px solid #69727a;
+      border-bottom: 1px solid #050709;
+    }
+
+    .mode-button {
+      min-height: 34px;
+      border: 1px solid transparent;
+      border-radius: 3px;
+      background: #1b2228;
+      color: #9ba7af;
+      cursor: pointer;
+      transition: color 140ms ease, background 140ms ease, border-color 140ms ease;
+    }
+
+    .mode-button:hover {
+      color: #f3fbff;
+      background: #263038;
+    }
+
+    .mode-button.active {
+      color: #fff;
+      border-color: #4cadd0;
+      background: linear-gradient(#268db5, #145673);
+      box-shadow: inset 0 1px rgba(255, 255, 255, 0.28), 0 0 10px rgba(48, 188, 234, 0.2);
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: minmax(190px, 1fr) auto minmax(190px, 1fr);
+      align-items: center;
+      gap: 18px;
+      padding: 14px 16px 16px;
+      background: linear-gradient(#313941, #1b2127 60%, #13181d);
+      border-top: 1px solid #515b64;
+    }
+
+    .track-meta {
+      min-width: 0;
+    }
+
+    .track-name {
+      margin: 0 0 4px;
+      overflow: hidden;
+      color: #f5f8fa;
+      font-size: 14px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .track-status {
+      margin: 0;
+      color: #83909a;
+      font-size: 11px;
+      letter-spacing: 0;
+    }
+
+    .transport {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .round-button,
+    .file-button {
+      display: inline-grid;
+      place-items: center;
+      border: 1px solid #68737c;
+      background: linear-gradient(#515b63, #242b31 52%, #151a1f 53%, #30373d);
+      box-shadow: inset 0 1px rgba(255, 255, 255, 0.25), 0 2px 4px rgba(0, 0, 0, 0.4);
+      cursor: pointer;
+    }
+
+    .round-button:hover,
+    .file-button:hover {
+      border-color: #91a3ae;
+      filter: brightness(1.12);
+    }
+
+    .file-button.active {
+      color: #fff;
+      border-color: #57d7ed;
+      background: linear-gradient(#2999b8, #145b73 52%, #0c4053 53%, #176b83);
+      box-shadow: inset 0 1px rgba(255, 255, 255, 0.3), 0 0 10px rgba(59, 214, 238, 0.35);
+    }
+
+    .round-button:disabled,
+    .file-button:disabled,
+    input:disabled {
+      opacity: 0.42;
+      cursor: not-allowed;
+    }
+
+    .round-button:active,
+    .file-button:active {
+      transform: translateY(1px);
+    }
+
+    .round-button {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      font-size: 19px;
+      line-height: 1;
+    }
+
+    .play-icon {
+      display: block;
+      width: 0;
+      height: 0;
+      margin-left: 3px;
+      border-top: 8px solid transparent;
+      border-bottom: 8px solid transparent;
+      border-left: 12px solid #eefbff;
+      filter: drop-shadow(0 0 3px #41c5ef);
+    }
+
+    .pause-icon {
+      width: 13px;
+      height: 16px;
+      margin: 0;
+      border: 0;
+      background: linear-gradient(90deg, #eefbff 0 38%, transparent 38% 62%, #eefbff 62%);
+      filter: drop-shadow(0 0 3px #41c5ef);
+    }
+
+    .file-button {
+      min-height: 34px;
+      padding: 0 13px;
+      border-radius: 4px;
+      color: #e7edf0;
+      font-size: 12px;
+    }
+
+    .right-controls {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .volume-icon {
+      color: #aab5bc;
+      font-size: 15px;
+    }
+
+    .timeline {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: 40px minmax(0, 1fr) 40px;
+      align-items: center;
+      gap: 10px;
+      color: #9da9b0;
+      font: 11px Consolas, monospace;
+    }
+
+    input[type="range"] {
+      height: 16px;
+      margin: 0;
+      appearance: none;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 4px;
+      border: 1px solid #090c0e;
+      border-radius: 2px;
+      background: linear-gradient(90deg, #40b9df var(--fill, 0%), #0a0d10 var(--fill, 0%));
+      box-shadow: inset 0 1px 2px #000;
+    }
+
+    input[type="range"]::-moz-range-track {
+      height: 4px;
+      border: 1px solid #090c0e;
+      border-radius: 2px;
+      background: #0a0d10;
+    }
+
+    input[type="range"]::-moz-range-progress {
+      height: 4px;
+      background: #40b9df;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      width: 12px;
+      height: 12px;
+      margin-top: -5px;
+      appearance: none;
+      border: 1px solid #c9d1d6;
+      border-radius: 50%;
+      background: linear-gradient(#fff, #75818a);
+      box-shadow: 0 0 0 1px #111, 0 0 6px rgba(64, 185, 223, 0.8);
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 11px;
+      height: 11px;
+      border: 1px solid #c9d1d6;
+      border-radius: 50%;
+      background: linear-gradient(#fff, #75818a);
+    }
+
+    #volume {
+      width: min(110px, 20vw);
+    }
+
+    #audio-file,
+    audio {
+      display: none;
+    }
+
+    button:focus-visible,
+    input:focus-visible,
+    label:focus-visible {
+      outline: 2px solid #66d6f6;
+      outline-offset: 2px;
+    }
+
+    @media (max-width: 680px) {
+      body {
+        place-items: start center;
+      }
+
+      .player {
+        width: calc(100vw - 16px);
+        margin: 8px auto;
+      }
+
+      .stage {
+        min-height: 300px;
+        aspect-ratio: 4 / 3;
+      }
+
+      .mode-switcher {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .controls {
+        grid-template-columns: 1fr auto;
+        gap: 14px;
+      }
+
+      .track-meta {
+        grid-column: 1 / -1;
+      }
+
+      .transport {
+        grid-row: 2;
+        grid-column: 1;
+        justify-content: flex-start;
+      }
+
+      .right-controls {
+        grid-row: 2;
+        grid-column: 2;
+        justify-content: flex-start;
+      }
+
+      .timeline {
+        grid-column: 1 / -1;
+      }
+
+      .display-info {
+        inset: 12px 12px auto;
+      }
+    }
+
+    @media (max-width: 420px) {
+      .controls {
+        grid-template-columns: 1fr;
+      }
+
+      .right-controls {
+        grid-row: 3;
+        grid-column: 1;
+      }
+
+      .timeline {
+        grid-row: 4;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="player" aria-label="音频可视化播放器">
+    <header class="titlebar">
+      <span class="app-mark" aria-hidden="true"></span>
+      <span>音频可视化</span>
+    </header>
+
+    <section class="stage" aria-label="音频可视化画布">
+      <canvas id="visualizer"></canvas>
+      <div class="display-info">
+        <span id="display-mode">SPECTRUM BARS</span>
+        <span id="signal-label">IDLE SIGNAL</span>
+      </div>
+      <button class="fullscreen-button" id="fullscreen-button" type="button" aria-label="全屏显示可视化" title="全屏显示可视化">全屏显示</button>
+    </section>
+
+    <nav class="mode-switcher" aria-label="可视化类型">
+      <button class="mode-button active" type="button" data-mode="bars">频谱柱</button>
+      <button class="mode-button" type="button" data-mode="wave">示波线</button>
+      <button class="mode-button" type="button" data-mode="particles">粒子</button>
+      <button class="mode-button" type="button" data-mode="vortex">漩涡</button>
+      <button class="mode-button" type="button" data-mode="random">随机效果</button>
+    </nav>
+
+    <section class="controls">
+      <div class="track-meta">
+        <p class="track-name" id="track-name">未选择音频</p>
+        <p class="track-status" id="track-status">选择本地文件开始播放</p>
+      </div>
+
+      <div class="transport">
+        <button class="round-button" id="play-button" type="button" aria-label="播放" title="播放">
+          <span class="play-icon" aria-hidden="true"></span>
+        </button>
+        <label class="file-button" for="audio-file" tabindex="0">选择音频</label>
+        <input id="audio-file" type="file" accept="audio/*">
+        <button class="file-button" id="microphone-button" type="button" aria-pressed="false">麦克风</button>
+      </div>
+
+      <div class="right-controls">
+        <span class="volume-icon" aria-hidden="true">VOL</span>
+        <input id="volume" type="range" min="0" max="1" value="0.78" step="0.01" aria-label="音量">
+      </div>
+
+      <div class="timeline">
+        <span id="current-time">0:00</span>
+        <input id="progress" type="range" min="0" max="100" value="0" step="0.1" aria-label="播放进度">
+        <span id="duration">0:00</span>
+      </div>
+    </section>
+
+    <audio id="audio" preload="metadata"></audio>
+  </main>
+
+  <script>
+    const canvas = document.querySelector("#visualizer");
+    const ctx = canvas.getContext("2d");
+    const stage = document.querySelector(".stage");
+    const audio = document.querySelector("#audio");
+    const audioFile = document.querySelector("#audio-file");
+    const playButton = document.querySelector("#play-button");
+    const microphoneButton = document.querySelector("#microphone-button");
+    const fullscreenButton = document.querySelector("#fullscreen-button");
+    const progress = document.querySelector("#progress");
+    const volume = document.querySelector("#volume");
+    const trackName = document.querySelector("#track-name");
+    const trackStatus = document.querySelector("#track-status");
+    const currentTime = document.querySelector("#current-time");
+    const durationLabel = document.querySelector("#duration");
+    const displayMode = document.querySelector("#display-mode");
+    const signalLabel = document.querySelector("#signal-label");
+    const modeButtons = [...document.querySelectorAll(".mode-button")];
+
+    const modeNames = {
+      bars: "SPECTRUM BARS",
+      wave: "OSCILLOSCOPE",
+      particles: "PARTICLE FIELD",
+      vortex: "SONIC VORTEX",
+      random: "RANDOM EFFECTS"
+    };
+
+    let mode = "bars";
+    let audioContext;
+    let analyser;
+    let audioSource;
+    let microphoneSource;
+    let microphoneStream;
+    let microphoneRequestId = 0;
+    let frequencyData;
+    let timeData;
+    let objectUrl;
+    let inputMode = "idle";
+    let isSeeking = false;
+    let particles = [];
+    let randomFamily = "magic";
+    let previousRandomFamily = "magic";
+    let randomPreset = 0;
+    let previousRandomPreset = 0;
+    let randomHue = 180;
+    let previousRandomHue = 180;
+    let lastRandomChange = 0;
+    let randomTransitionStart = 0;
+
+    const magicPresetNames = [
+      "KALEIDOSCOPE",
+      "NEON TUNNEL",
+      "SILK RIBBONS",
+      "AURORA FAN",
+      "STAR MATRIX",
+      "ROSE CURVE",
+      "CRYSTAL BURST"
+    ];
+
+    const groupPresetNames = [
+      "MIRROR BARS",
+      "ORBIT EQ",
+      "COLOR RIBBONS",
+      "PULSE MATRIX",
+      "BEAT FAN"
+    ];
+
+    function setupAudioGraph() {
+      if (audioContext) return;
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      analyser = audioContext.createAnalyser();
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.82;
+      frequencyData = new Uint8Array(analyser.frequencyBinCount);
+      timeData = new Uint8Array(analyser.fftSize);
+      audioSource = audioContext.createMediaElementSource(audio);
+      audioSource.connect(analyser);
+      audioSource.connect(audioContext.destination);
+    }
+
+    function setMicrophoneState(isActive) {
+      microphoneButton.disabled = false;
+      microphoneButton.classList.toggle("active", isActive);
+      microphoneButton.setAttribute("aria-pressed", String(isActive));
+      microphoneButton.textContent = isActive ? "停止麦克风" : "麦克风";
+      playButton.disabled = isActive;
+      progress.disabled = isActive;
+    }
+
+    function stopMicrophone(showStatus = true) {
+      microphoneRequestId++;
+      if (microphoneSource) microphoneSource.disconnect();
+      if (microphoneStream) microphoneStream.getTracks().forEach((track) => track.stop());
+      microphoneSource = null;
+      microphoneStream = null;
+      if (inputMode === "microphone") inputMode = audio.src ? "file" : "idle";
+      setMicrophoneState(false);
+      if (showStatus) {
+        trackName.textContent = audio.src ? trackName.dataset.fileName : "未选择音频";
+        trackStatus.textContent = audio.src ? "麦克风已停止 · 音频准备播放" : "麦克风已停止";
+        currentTime.textContent = formatTime(audio.currentTime);
+        durationLabel.textContent = formatTime(audio.duration);
+      }
+    }
+
+    async function startMicrophone() {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        trackStatus.textContent = "当前环境不支持麦克风，请使用 HTTPS 或本地服务器";
+        return;
+      }
+
+      const requestId = ++microphoneRequestId;
+      microphoneButton.disabled = true;
+      trackName.textContent = "麦克风输入";
+      trackStatus.textContent = "正在请求麦克风权限...";
+      audio.pause();
+
+      try {
+        setupAudioGraph();
+        if (audioContext.state === "suspended") await audioContext.resume();
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        });
+        if (requestId !== microphoneRequestId) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        microphoneStream = stream;
+        microphoneSource = audioContext.createMediaStreamSource(microphoneStream);
+        microphoneSource.connect(analyser);
+        microphoneStream.getAudioTracks()[0]?.addEventListener("ended", () => {
+          if (inputMode === "microphone") stopMicrophone();
+        }, { once: true });
+        inputMode = "microphone";
+        setMicrophoneState(true);
+        trackName.textContent = "麦克风输入";
+        trackStatus.textContent = "实时采集中 · 不会回放麦克风声音";
+        currentTime.textContent = "LIVE";
+        durationLabel.textContent = "--:--";
+      } catch (error) {
+        if (requestId !== microphoneRequestId) return;
+        stopMicrophone(false);
+        trackName.textContent = audio.src ? trackName.dataset.fileName : "未选择音频";
+        if (error.name === "NotAllowedError") {
+          trackStatus.textContent = "麦克风权限被拒绝";
+        } else if (error.name === "NotFoundError") {
+          trackStatus.textContent = "未检测到可用麦克风";
+        } else {
+          trackStatus.textContent = "无法启用麦克风";
+        }
+      } finally {
+        if (requestId === microphoneRequestId) microphoneButton.disabled = false;
+      }
+    }
+
+    function setPlayIcon(isPlaying) {
+      playButton.innerHTML = `<span class="${isPlaying ? "pause-icon" : "play-icon"}" aria-hidden="true"></span>`;
+      playButton.setAttribute("aria-label", isPlaying ? "暂停" : "播放");
+      playButton.title = isPlaying ? "暂停" : "播放";
+    }
+
+    function formatTime(seconds) {
+      if (!Number.isFinite(seconds)) return "0:00";
+      const minutes = Math.floor(seconds / 60);
+      return `${minutes}:${Math.floor(seconds % 60).toString().padStart(2, "0")}`;
+    }
+
+    function updateRangeFill(input, value) {
+      input.style.setProperty("--fill", `${value}%`);
+    }
+
+    function getData(now) {
+      if (analyser && (inputMode === "microphone" || !audio.paused)) {
+        analyser.getByteFrequencyData(frequencyData);
+        analyser.getByteTimeDomainData(timeData);
+        return { frequency: frequencyData, time: timeData, active: true };
+      }
+
+      const idleFrequency = new Uint8Array(128);
+      const idleTime = new Uint8Array(256);
+      for (let i = 0; i < idleFrequency.length; i++) {
+        const falloff = Math.max(0, 1 - i / idleFrequency.length);
+        idleFrequency[i] = 10 + Math.max(0, Math.sin(now * 0.0016 + i * 0.31)) * 24 * falloff;
+      }
+      for (let i = 0; i < idleTime.length; i++) {
+        idleTime[i] = 128 + Math.sin(i * 0.12 + now * 0.0014) * 4;
+      }
+      return { frequency: idleFrequency, time: idleTime, active: false };
+    }
+
+    function resizeCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      const ratio = Math.min(window.devicePixelRatio || 1, 2);
+      const width = Math.round(rect.width * ratio);
+      const height = Math.round(rect.height * ratio);
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+        particles = [];
+      }
+      return { width: rect.width, height: rect.height };
+    }
+
+    function drawBackground(width, height, now) {
+      ctx.fillStyle = "#010406";
+      ctx.fillRect(0, 0, width, height);
+
+      const glow = ctx.createRadialGradient(width * 0.5, height * 0.56, 0, width * 0.5, height * 0.56, width * 0.65);
+      glow.addColorStop(0, "rgba(0, 78, 105, 0.18)");
+      glow.addColorStop(0.55, "rgba(0, 25, 39, 0.1)");
+      glow.addColorStop(1, "rgba(0, 0, 0, 0)");
+      ctx.fillStyle = glow;
+      ctx.fillRect(0, 0, width, height);
+
+      ctx.strokeStyle = "rgba(81, 176, 199, 0.055)";
+      ctx.lineWidth = 1;
+      const spacing = 30;
+      const offset = (now * 0.006) % spacing;
+      for (let x = offset; x < width; x += spacing) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
+        ctx.stroke();
+      }
+      for (let y = offset; y < height; y += spacing) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+      }
+    }
+
+    function drawBars(data, width, height) {
+      const count = Math.max(28, Math.min(72, Math.floor(width / 11)));
+      const gap = Math.max(2, width * 0.003);
+      const barWidth = (width - gap * (count - 1)) / count;
+      const maxHeight = height * 0.72;
+      const baseline = height * 0.9;
+
+      for (let i = 0; i < count; i++) {
+        const index = Math.floor((i / count) ** 1.7 * data.length * 0.72);
+        const amplitude = data[index] / 255;
+        const barHeight = Math.max(3, amplitude * maxHeight);
+        const x = i * (barWidth + gap);
+        const gradient = ctx.createLinearGradient(0, baseline, 0, baseline - maxHeight);
+        gradient.addColorStop(0, "#1678a2");
+        gradient.addColorStop(0.48, "#35d7e7");
+        gradient.addColorStop(0.78, "#b9e747");
+        gradient.addColorStop(1, "#fff36c");
+        ctx.fillStyle = gradient;
+        ctx.shadowColor = "rgba(44, 218, 239, 0.55)";
+        ctx.shadowBlur = 8;
+        ctx.fillRect(x, baseline - barHeight, barWidth, barHeight);
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "rgba(69, 211, 233, 0.13)";
+        ctx.fillRect(x, baseline + 5, barWidth, barHeight * 0.13);
+      }
+    }
+
+    function drawWave(data, width, height, now) {
+      const layers = [
+        { offset: 0, color: "rgba(96, 243, 255, 0.95)", scale: 0.33, blur: 13 },
+        { offset: 2.2, color: "rgba(186, 235, 62, 0.6)", scale: 0.2, blur: 7 },
+        { offset: -2.4, color: "rgba(39, 135, 255, 0.48)", scale: 0.42, blur: 16 }
+      ];
+
+      layers.forEach((layer, layerIndex) => {
+        ctx.beginPath();
+        for (let i = 0; i < data.length; i++) {
+          const x = i / (data.length - 1) * width;
+          const audioY = (data[i] - 128) / 128;
+          const idleRipple = Math.sin(i * 0.055 + now * 0.0018 + layerIndex) * 0.025;
+          const y = height * (0.5 + layer.offset * 0.035) + (audioY + idleRipple) * height * layer.scale;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = layer.color;
+        ctx.lineWidth = layerIndex === 0 ? 2 : 1.2;
+        ctx.shadowColor = layer.color;
+        ctx.shadowBlur = layer.blur;
+        ctx.stroke();
+      });
+      ctx.shadowBlur = 0;
+    }
+
+    function ensureParticles(width, height) {
+      const target = Math.min(190, Math.max(80, Math.floor(width / 5)));
+      while (particles.length < target) {
+        particles.push({
+          angle: Math.random() * Math.PI * 2,
+          radius: Math.random(),
+          speed: 0.003 + Math.random() * 0.009,
+          size: 0.7 + Math.random() * 2.1,
+          band: Math.floor(Math.random() * 72),
+          drift: Math.random() * Math.PI * 2
+        });
+      }
+      particles.length = target;
+    }
+
+    function drawParticles(data, width, height, now) {
+      ensureParticles(width, height);
+      const centerX = width / 2;
+      const centerY = height / 2;
+      const radius = Math.min(width, height) * 0.44;
+      const energy = data.slice(0, 96).reduce((sum, value) => sum + value, 0) / (96 * 255);
+
+      ctx.globalCompositeOperation = "lighter";
+      particles.forEach((particle, index) => {
+        const value = data[particle.band % data.length] / 255;
+        particle.angle += particle.speed * (0.7 + energy * 2.8);
+        const pulse = 1 + value * 0.28;
+        const x = centerX + Math.cos(particle.angle) * particle.radius * radius * pulse;
+        const y = centerY + Math.sin(particle.angle * 1.7 + particle.drift) * particle.radius * radius * 0.8 * pulse;
+        const hue = index % 4 === 0 ? 78 : 188 + particle.radius * 22;
+        ctx.beginPath();
+        ctx.arc(x, y, particle.size * (0.7 + value * 2.4), 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${hue}, 86%, 62%, ${0.28 + value * 0.7})`;
+        ctx.shadowColor = ctx.fillStyle;
+        ctx.shadowBlur = 8 + value * 15;
+        ctx.fill();
+      });
+      ctx.shadowBlur = 0;
+      ctx.globalCompositeOperation = "source-over";
+    }
+
+    function drawVortex(data, width, height, now) {
+      const centerX = width / 2;
+      const centerY = height / 2;
+      const maxRadius = Math.min(width, height) * 0.44;
+      const points = 240;
+      const turns = 4.8;
+
+      ctx.globalCompositeOperation = "lighter";
+      for (let arm = 0; arm < 3; arm++) {
+        ctx.beginPath();
+        for (let i = 0; i < points; i++) {
+          const t = i / (points - 1);
+          const value = data[Math.floor(t * Math.min(data.length - 1, 160))] / 255;
+          const angle = t * Math.PI * 2 * turns + now * 0.00035 * (arm % 2 ? -1 : 1) + arm * Math.PI * 2 / 3;
+          const radius = t * maxRadius * (0.82 + value * 0.28);
+          const x = centerX + Math.cos(angle) * radius;
+          const y = centerY + Math.sin(angle) * radius * 0.55;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        const colors = ["rgba(65, 224, 244, 0.82)", "rgba(173, 232, 59, 0.56)", "rgba(28, 121, 234, 0.58)"];
+        ctx.strokeStyle = colors[arm];
+        ctx.lineWidth = 1.4;
+        ctx.shadowColor = colors[arm];
+        ctx.shadowBlur = 12;
+        ctx.stroke();
+      }
+
+      const bass = data.slice(0, 18).reduce((sum, value) => sum + value, 0) / (18 * 255);
+      const core = 12 + bass * 44;
+      const coreGlow = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, core * 2.8);
+      coreGlow.addColorStop(0, "rgba(244, 255, 174, 0.95)");
+      coreGlow.addColorStop(0.2, "rgba(64, 231, 248, 0.72)");
+      coreGlow.addColorStop(1, "rgba(20, 134, 214, 0)");
+      ctx.fillStyle = coreGlow;
+      ctx.fillRect(centerX - core * 3, centerY - core * 3, core * 6, core * 6);
+      ctx.shadowBlur = 0;
+      ctx.globalCompositeOperation = "source-over";
+    }
+
+    function randomizeEffect(now) {
+      const magicCount = magicPresetNames.length;
+      const totalCount = magicCount + groupPresetNames.length;
+      const currentIndex = randomFamily === "magic" ? randomPreset : magicCount + randomPreset;
+      let nextIndex = Math.floor(Math.random() * totalCount);
+      if (nextIndex === currentIndex) nextIndex = (nextIndex + 1) % totalCount;
+
+      previousRandomFamily = randomFamily;
+      previousRandomPreset = randomPreset;
+      previousRandomHue = randomHue;
+      randomFamily = nextIndex < magicCount ? "magic" : "group";
+      randomPreset = nextIndex < magicCount ? nextIndex : nextIndex - magicCount;
+      randomHue = Math.floor(Math.random() * 360);
+      lastRandomChange = now;
+      randomTransitionStart = now;
+    }
+
+    function drawMagicPreset(preset, hueBase, data, width, height, now, entrance) {
+      const centerX = width / 2;
+      const centerY = height / 2;
+      const size = Math.min(width, height);
+      const bass = data.slice(0, 24).reduce((sum, value) => sum + value, 0) / (24 * 255);
+      ctx.save();
+      ctx.translate(centerX, centerY);
+      ctx.scale(0.94 + entrance * 0.06, 0.94 + entrance * 0.06);
+      ctx.rotate((1 - entrance) * 0.035);
+      ctx.globalCompositeOperation = "lighter";
+
+      if (preset === 0) {
+        const arms = 10;
+        for (let arm = 0; arm < arms; arm++) {
+          ctx.save();
+          ctx.rotate(arm * Math.PI * 2 / arms + now * 0.00016);
+          ctx.beginPath();
+          for (let i = 0; i < 72; i++) {
+            const value = data[Math.floor(i / 72 * Math.min(data.length, 180))] / 255;
+            const radius = i / 71 * size * 0.52;
+            const x = radius;
+            const y = Math.sin(i * 0.23 + now * 0.002) * size * (0.012 + value * 0.08);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          const hue = (hueBase + arm * 31) % 360;
+          ctx.strokeStyle = `hsla(${hue}, 92%, 62%, 0.72)`;
+          ctx.lineWidth = 1 + bass * 2.5;
+          ctx.shadowColor = `hsl(${hue}, 92%, 58%)`;
+          ctx.shadowBlur = 9 + bass * 18;
+          ctx.stroke();
+          ctx.restore();
+        }
+      } else if (preset === 1) {
+        for (let ring = 0; ring < 18; ring++) {
+          const index = Math.floor(ring / 18 * Math.min(data.length, 150));
+          const value = data[index] / 255;
+          const phase = (now * (0.00015 + ring * 0.000003)) % 1;
+          const radius = ((ring / 18 + phase) % 1) * size * 0.62;
+          const hue = (hueBase + ring * 17 + now * 0.018) % 360;
+          ctx.beginPath();
+          ctx.ellipse(0, 0, radius, radius * (0.42 + value * 0.24), now * 0.00012 + ring * 0.09, 0, Math.PI * 2);
+          ctx.strokeStyle = `hsla(${hue}, 96%, 64%, ${0.18 + value * 0.72})`;
+          ctx.lineWidth = 0.7 + value * 3;
+          ctx.shadowColor = `hsl(${hue}, 90%, 60%)`;
+          ctx.shadowBlur = 7 + value * 16;
+          ctx.stroke();
+        }
+      } else if (preset === 2) {
+        for (let ribbon = 0; ribbon < 6; ribbon++) {
+          ctx.beginPath();
+          for (let i = 0; i < 130; i++) {
+            const t = i / 129;
+            const value = data[Math.floor(t * Math.min(data.length - 1, 190))] / 255;
+            const x = (t - 0.5) * width * 0.92;
+            const wave = Math.sin(t * Math.PI * (4 + ribbon) + now * 0.0014 * (ribbon % 2 ? -1 : 1));
+            const y = wave * size * (0.07 + value * 0.19) + (ribbon - 2.5) * 7;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          const hue = (hueBase + ribbon * 56) % 360;
+          ctx.strokeStyle = `hsla(${hue}, 94%, 63%, 0.68)`;
+          ctx.lineWidth = 1.2 + bass * 2;
+          ctx.shadowColor = `hsl(${hue}, 94%, 60%)`;
+          ctx.shadowBlur = 10 + bass * 15;
+          ctx.stroke();
+        }
+      } else if (preset === 3) {
+        for (let fan = 0; fan < 9; fan++) {
+          ctx.beginPath();
+          for (let i = 0; i < 110; i++) {
+            const t = i / 109;
+            const value = data[Math.floor(t * Math.min(data.length - 1, 180))] / 255;
+            const angle = (t - 0.5) * Math.PI * 1.35 + fan * 0.055;
+            const radius = size * (0.16 + t * 0.34 + value * 0.12);
+            const sway = Math.sin(now * 0.0011 + fan * 0.8 + t * 5) * size * 0.035;
+            const x = Math.sin(angle) * radius + sway;
+            const y = -Math.cos(angle) * radius * 0.66 + fan * 5 - size * 0.05;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          const hue = (hueBase + fan * 27) % 360;
+          ctx.strokeStyle = `hsla(${hue}, 90%, 66%, ${0.24 + fan * 0.055})`;
+          ctx.lineWidth = 1 + bass * 1.8;
+          ctx.shadowColor = `hsl(${hue}, 92%, 62%)`;
+          ctx.shadowBlur = 12 + bass * 14;
+          ctx.stroke();
+        }
+      } else if (preset === 4) {
+        const pointCount = Math.min(170, Math.floor(width / 4));
+        for (let i = 0; i < pointCount; i++) {
+          const band = (i * 13) % Math.min(data.length, 180);
+          const value = data[band] / 255;
+          const angle = i * 2.39996 + now * (0.000035 + i % 5 * 0.000006);
+          const radius = Math.sqrt(i / pointCount) * size * 0.55 * (0.88 + value * 0.18);
+          const x = Math.cos(angle) * radius;
+          const y = Math.sin(angle) * radius * 0.72;
+          const hue = (hueBase + i * 4) % 360;
+          ctx.beginPath();
+          ctx.arc(x, y, 0.7 + value * 3.2, 0, Math.PI * 2);
+          ctx.fillStyle = `hsla(${hue}, 92%, 70%, ${0.3 + value * 0.68})`;
+          ctx.shadowColor = `hsl(${hue}, 92%, 64%)`;
+          ctx.shadowBlur = 7 + value * 13;
+          ctx.fill();
+
+          if (i > 2 && i % 4 === 0) {
+            const previousAngle = (i - 2) * 2.39996 + now * (0.000035 + (i - 2) % 5 * 0.000006);
+            const previousRadius = Math.sqrt((i - 2) / pointCount) * size * 0.55;
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(Math.cos(previousAngle) * previousRadius, Math.sin(previousAngle) * previousRadius * 0.72);
+            ctx.strokeStyle = `hsla(${hue}, 88%, 64%, ${0.05 + value * 0.18})`;
+            ctx.lineWidth = 0.6;
+            ctx.stroke();
+          }
+        }
+      } else if (preset === 5) {
+        for (let layer = 0; layer < 5; layer++) {
+          ctx.beginPath();
+          const petals = 3 + layer;
+          for (let i = 0; i <= 280; i++) {
+            const angle = i / 280 * Math.PI * 2;
+            const index = Math.floor(i / 281 * Math.min(data.length - 1, 190));
+            const value = data[index] / 255;
+            const radius = Math.cos(petals * angle + now * 0.00045 * (layer % 2 ? -1 : 1)) * size * (0.13 + layer * 0.035 + value * 0.08);
+            const x = Math.cos(angle) * radius;
+            const y = Math.sin(angle) * radius * 0.76;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          const hue = (hueBase + layer * 61) % 360;
+          ctx.strokeStyle = `hsla(${hue}, 94%, 65%, ${0.34 + layer * 0.1})`;
+          ctx.lineWidth = 0.9 + bass * 2.2;
+          ctx.shadowColor = `hsl(${hue}, 94%, 60%)`;
+          ctx.shadowBlur = 9 + bass * 17;
+          ctx.stroke();
+        }
+      } else {
+        const shards = 28;
+        for (let i = 0; i < shards; i++) {
+          const value = data[(i * 5) % Math.min(data.length, 160)] / 255;
+          const angle = i / shards * Math.PI * 2 + now * 0.00018;
+          const inner = size * (0.08 + bass * 0.04);
+          const outer = size * (0.2 + value * 0.34);
+          const spread = 0.025 + value * 0.04;
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(angle - spread) * inner, Math.sin(angle - spread) * inner * 0.72);
+          ctx.lineTo(Math.cos(angle) * outer, Math.sin(angle) * outer * 0.72);
+          ctx.lineTo(Math.cos(angle + spread) * inner, Math.sin(angle + spread) * inner * 0.72);
+          ctx.closePath();
+          const hue = (hueBase + i * 19) % 360;
+          const shardGradient = ctx.createLinearGradient(0, 0, Math.cos(angle) * outer, Math.sin(angle) * outer);
+          shardGradient.addColorStop(0, `hsla(${hue}, 90%, 62%, 0.04)`);
+          shardGradient.addColorStop(1, `hsla(${(hue + 45) % 360}, 96%, 68%, ${0.24 + value * 0.62})`);
+          ctx.fillStyle = shardGradient;
+          ctx.shadowColor = `hsl(${hue}, 92%, 60%)`;
+          ctx.shadowBlur = 8 + value * 14;
+          ctx.fill();
+        }
+      }
+
+      ctx.restore();
+    }
+
+    function clipShapeReveal(width, height, progress, invert) {
+      const centerX = width / 2;
+      const centerY = height / 2;
+      const maxRadius = Math.hypot(width, height) * 0.56;
+      const ripple = Math.sin(progress * Math.PI) * maxRadius * 0.035;
+      const points = 96;
+
+      ctx.beginPath();
+      if (invert) ctx.rect(-1, -1, width + 2, height + 2);
+      for (let i = 0; i <= points; i++) {
+        const angle = i / points * Math.PI * 2;
+        const radius = Math.max(0, maxRadius * progress + Math.sin(angle * 7 + progress * Math.PI * 4) * ripple);
+        const x = centerX + Math.cos(angle) * radius;
+        const y = centerY + Math.sin(angle) * radius;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.clip(invert ? "evenodd" : "nonzero");
+    }
+
+    function drawRandomPreset(family, preset, hue, data, width, height, now, entrance) {
+      if (family === "magic") drawMagicPreset(preset, hue, data, width, height, now, entrance);
+      else drawGroupPreset(preset, hue, data, width, height, now, entrance);
+    }
+
+    function drawGroupPreset(preset, hueBase, data, width, height, now, entrance) {
+      const centerX = width / 2;
+      const centerY = height / 2;
+      const size = Math.min(width, height);
+      const bass = data.slice(0, 24).reduce((sum, value) => sum + value, 0) / (24 * 255);
+      ctx.save();
+      ctx.translate(centerX, centerY);
+      ctx.scale(0.95 + entrance * 0.05, 0.95 + entrance * 0.05);
+      ctx.globalCompositeOperation = "lighter";
+
+      if (preset === 0) {
+        const count = Math.max(26, Math.min(64, Math.floor(width / 13)));
+        const gap = 2;
+        const barWidth = (width * 0.9 - gap * (count - 1)) / count;
+        for (let i = 0; i < count; i++) {
+          const index = Math.floor((i / count) ** 1.5 * Math.min(data.length, 190));
+          const value = data[index] / 255;
+          const barHeight = 3 + value * height * 0.38;
+          const x = -width * 0.45 + i * (barWidth + gap);
+          const hue = (hueBase + i * 5) % 360;
+          const gradient = ctx.createLinearGradient(0, -barHeight, 0, barHeight);
+          gradient.addColorStop(0, `hsla(${hue}, 94%, 66%, 0.92)`);
+          gradient.addColorStop(0.48, `hsla(${(hue + 48) % 360}, 90%, 53%, 0.34)`);
+          gradient.addColorStop(0.52, `hsla(${(hue + 48) % 360}, 90%, 53%, 0.34)`);
+          gradient.addColorStop(1, `hsla(${hue}, 94%, 66%, 0.92)`);
+          ctx.fillStyle = gradient;
+          ctx.shadowColor = `hsl(${hue}, 90%, 58%)`;
+          ctx.shadowBlur = 7 + value * 9;
+          ctx.fillRect(x, -barHeight, barWidth, barHeight * 2);
+        }
+      } else if (preset === 1) {
+        const count = 92;
+        const inner = size * (0.13 + bass * 0.035);
+        for (let i = 0; i < count; i++) {
+          const value = data[Math.floor(i / count * Math.min(data.length, 200))] / 255;
+          const angle = i / count * Math.PI * 2 - Math.PI / 2 + now * 0.00008;
+          const outer = inner + 4 + value * size * 0.25;
+          const hue = (hueBase + i * 3.5) % 360;
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner);
+          ctx.lineTo(Math.cos(angle) * outer, Math.sin(angle) * outer);
+          ctx.strokeStyle = `hsla(${hue}, 95%, 64%, ${0.35 + value * 0.65})`;
+          ctx.lineWidth = Math.max(1.2, size * 0.006);
+          ctx.shadowColor = `hsl(${hue}, 95%, 60%)`;
+          ctx.shadowBlur = 6 + value * 12;
+          ctx.stroke();
+        }
+      } else if (preset === 2) {
+        for (let ribbon = 0; ribbon < 8; ribbon++) {
+          ctx.beginPath();
+          for (let i = 0; i < 150; i++) {
+            const t = i / 149;
+            const value = data[Math.floor(t * Math.min(data.length - 1, 190))] / 255;
+            const x = (t - 0.5) * width * 0.94;
+            const y = Math.sin(t * Math.PI * (2.5 + ribbon * 0.34) + now * 0.0013 + ribbon) * size * (0.035 + value * 0.12) + (ribbon - 3.5) * 13;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          const hue = (hueBase + ribbon * 43) % 360;
+          ctx.strokeStyle = `hsla(${hue}, 93%, 65%, ${0.26 + ribbon * 0.065})`;
+          ctx.lineWidth = 1.1 + bass * 2.2;
+          ctx.shadowColor = `hsl(${hue}, 92%, 60%)`;
+          ctx.shadowBlur = 8 + bass * 13;
+          ctx.stroke();
+        }
+      } else if (preset === 3) {
+        const columns = Math.max(12, Math.min(24, Math.floor(width / 32)));
+        const rows = Math.max(7, Math.floor(columns * height / width * 0.65));
+        const cellWidth = width * 0.88 / columns;
+        const cellHeight = height * 0.72 / rows;
+        for (let row = 0; row < rows; row++) {
+          for (let column = 0; column < columns; column++) {
+            const index = (row * columns + column) % Math.min(data.length, 190);
+            const value = data[index] / 255;
+            const pulse = 0.35 + value * 0.65;
+            const x = -width * 0.44 + column * cellWidth;
+            const y = -height * 0.36 + row * cellHeight;
+            const hue = (hueBase + column * 8 + row * 21) % 360;
+            ctx.fillStyle = `hsla(${hue}, 90%, 60%, ${0.08 + value * 0.68})`;
+            ctx.shadowColor = `hsl(${hue}, 90%, 58%)`;
+            ctx.shadowBlur = value * 9;
+            ctx.fillRect(x + cellWidth * (1 - pulse) / 2, y + cellHeight * (1 - pulse) / 2, cellWidth * pulse - 2, cellHeight * pulse - 2);
+          }
+        }
+      } else {
+        const blades = 36;
+        for (let i = 0; i < blades; i++) {
+          const value = data[(i * 4) % Math.min(data.length, 180)] / 255;
+          const angle = i / blades * Math.PI * 2 + now * 0.00022;
+          const inner = size * 0.07;
+          const outer = size * (0.16 + value * 0.34);
+          const spread = Math.PI / blades * 0.7;
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(angle - spread) * inner, Math.sin(angle - spread) * inner * 0.76);
+          ctx.quadraticCurveTo(Math.cos(angle + spread * 0.3) * outer, Math.sin(angle + spread * 0.3) * outer * 0.76, Math.cos(angle + spread) * inner, Math.sin(angle + spread) * inner * 0.76);
+          const hue = (hueBase + i * 10) % 360;
+          ctx.strokeStyle = `hsla(${hue}, 96%, 65%, ${0.3 + value * 0.67})`;
+          ctx.lineWidth = 1.3 + value * 2.6;
+          ctx.shadowColor = `hsl(${hue}, 94%, 60%)`;
+          ctx.shadowBlur = 8 + value * 13;
+          ctx.stroke();
+        }
+      }
+
+      ctx.restore();
+    }
+
+    function drawRandom(data, width, height, now) {
+      if (!lastRandomChange || now - lastRandomChange > 6200) randomizeEffect(now);
+
+      const transitionDuration = 1600;
+      const rawProgress = Math.min(1, (now - randomTransitionStart) / transitionDuration);
+      const transition = rawProgress * rawProgress * (3 - 2 * rawProgress);
+      if (transition < 1) {
+        ctx.save();
+        clipShapeReveal(width, height, transition, true);
+        drawRandomPreset(previousRandomFamily, previousRandomPreset, previousRandomHue, data, width, height, now, 1 - transition * 0.3);
+        ctx.restore();
+
+        ctx.save();
+        clipShapeReveal(width, height, transition, false);
+        drawRandomPreset(randomFamily, randomPreset, randomHue, data, width, height, now, transition);
+        ctx.restore();
+      } else {
+        drawRandomPreset(randomFamily, randomPreset, randomHue, data, width, height, now, 1);
+      }
+      const presetNames = randomFamily === "magic" ? magicPresetNames : groupPresetNames;
+      displayMode.textContent = `RANDOM EFFECTS / ${presetNames[randomPreset]}`;
+    }
+
+    function animate(now) {
+      const { width, height } = resizeCanvas();
+      const data = getData(now);
+      drawBackground(width, height, now);
+
+      if (mode === "bars") drawBars(data.frequency, width, height);
+      if (mode === "wave") drawWave(data.time, width, height, now);
+      if (mode === "particles") drawParticles(data.frequency, width, height, now);
+      if (mode === "vortex") drawVortex(data.frequency, width, height, now);
+      if (mode === "random") drawRandom(data.frequency, width, height, now);
+
+      signalLabel.textContent = data.active ? "LIVE SIGNAL" : "IDLE SIGNAL";
+      requestAnimationFrame(animate);
+    }
+
+    modeButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        if (button.dataset.mode === "random") randomizeEffect(performance.now());
+        mode = button.dataset.mode;
+        modeButtons.forEach((item) => item.classList.toggle("active", item === button));
+        displayMode.textContent = modeNames[mode];
+        particles = [];
+      });
+    });
+
+    fullscreenButton.addEventListener("click", async () => {
+      try {
+        if (document.fullscreenElement) await document.exitFullscreen();
+        else await stage.requestFullscreen();
+      } catch (error) {
+        trackStatus.textContent = "浏览器无法进入全屏模式";
+      }
+    });
+
+    document.addEventListener("fullscreenchange", () => {
+      const isFullscreen = document.fullscreenElement === stage;
+      fullscreenButton.textContent = isFullscreen ? "退出全屏" : "全屏显示";
+      fullscreenButton.setAttribute("aria-label", isFullscreen ? "退出全屏" : "全屏显示可视化");
+      fullscreenButton.title = isFullscreen ? "退出全屏" : "全屏显示可视化";
+    });
+
+    audioFile.addEventListener("change", () => {
+      const file = audioFile.files[0];
+      if (!file) return;
+      stopMicrophone(false);
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      objectUrl = URL.createObjectURL(file);
+      audio.src = objectUrl;
+      inputMode = "file";
+      trackName.dataset.fileName = file.name.replace(/\.[^.]+$/, "");
+      trackName.textContent = trackName.dataset.fileName;
+      trackStatus.textContent = `${file.type || "本地音频"} · 准备播放`;
+      progress.value = 0;
+      updateRangeFill(progress, 0);
+      setPlayIcon(false);
+    });
+
+    playButton.addEventListener("click", async () => {
+      if (!audio.src) {
+        audioFile.click();
+        return;
+      }
+      setupAudioGraph();
+      if (audioContext.state === "suspended") await audioContext.resume();
+      inputMode = "file";
+      if (audio.paused) await audio.play();
+      else audio.pause();
+    });
+
+    microphoneButton.addEventListener("click", () => {
+      if (inputMode === "microphone") stopMicrophone();
+      else startMicrophone();
+    });
+
+    audio.addEventListener("play", () => {
+      setPlayIcon(true);
+      trackStatus.textContent = "正在播放 · 本地音频";
+    });
+
+    audio.addEventListener("pause", () => {
+      setPlayIcon(false);
+      if (inputMode !== "microphone" && !audio.ended && audio.src) trackStatus.textContent = "已暂停 · 本地音频";
+    });
+
+    audio.addEventListener("ended", () => {
+      setPlayIcon(false);
+      trackStatus.textContent = "播放完毕 · 本地音频";
+    });
+
+    audio.addEventListener("loadedmetadata", () => {
+      durationLabel.textContent = formatTime(audio.duration);
+    });
+
+    audio.addEventListener("timeupdate", () => {
+      if (isSeeking || !audio.duration) return;
+      const percentage = audio.currentTime / audio.duration * 100;
+      progress.value = percentage;
+      currentTime.textContent = formatTime(audio.currentTime);
+      updateRangeFill(progress, percentage);
+    });
+
+    progress.addEventListener("input", () => {
+      isSeeking = true;
+      const percentage = Number(progress.value);
+      currentTime.textContent = formatTime(audio.duration * percentage / 100);
+      updateRangeFill(progress, percentage);
+    });
+
+    progress.addEventListener("change", () => {
+      if (audio.duration) audio.currentTime = audio.duration * Number(progress.value) / 100;
+      isSeeking = false;
+    });
+
+    volume.addEventListener("input", () => {
+      audio.volume = Number(volume.value);
+      updateRangeFill(volume, Number(volume.value) * 100);
+    });
+
+    document.querySelector("label[for='audio-file']").addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        audioFile.click();
+      }
+    });
+
+    window.addEventListener("beforeunload", () => stopMicrophone(false));
+
+    audio.volume = Number(volume.value);
+    updateRangeFill(volume, Number(volume.value) * 100);
+    updateRangeFill(progress, 0);
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>
