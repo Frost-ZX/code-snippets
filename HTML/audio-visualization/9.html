@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XY 示波器</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #e9f0ea;
+      --muted: #91a69a;
+      --line: #264139;
+      --panel: #101a18;
+      --field: #07110f;
+      --signal: #81f2b1;
+      --signal-faint: rgba(129, 242, 177, 0.15);
+      --warning: #f1b766;
+      --danger: #f27f72;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      min-width: 320px;
+      height: 100vh;
+      height: 100dvh;
+      margin: 0;
+      color: var(--ink);
+      background: #0b1211;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      overflow: hidden;
+    }
+
+    .app {
+      width: min(1180px, calc(100% - 32px));
+      height: 100vh;
+      height: 100dvh;
+      margin: 0 auto;
+      padding: 28px 0 22px;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      gap: 20px;
+    }
+
+    .topbar, .controls, .readout {
+      display: flex;
+      align-items: center;
+    }
+
+    .topbar {
+      justify-content: space-between;
+      gap: 18px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .mark {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      color: var(--signal);
+      border: 1px solid var(--signal);
+      font-family: Consolas, monospace;
+      font-size: 13px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 650;
+      letter-spacing: 0;
+    }
+
+    .subtitle, .status, .axis, .readout { color: var(--muted); }
+
+    .subtitle {
+      margin: 3px 0 0;
+      font-size: 13px;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--warning);
+      box-shadow: 0 0 0 3px rgba(241, 183, 102, 0.12);
+    }
+
+    .status-dot.active {
+      background: var(--signal);
+      box-shadow: 0 0 0 3px var(--signal-faint);
+    }
+
+    .scope-shell {
+      min-height: 0;
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      background: var(--field);
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .axis {
+      position: absolute;
+      margin: 0;
+      font: 12px Consolas, monospace;
+      pointer-events: none;
+    }
+
+    .axis-x { right: 14px; bottom: 12px; }
+    .axis-y { top: 12px; left: 14px; writing-mode: vertical-rl; transform: rotate(180deg); }
+
+    .controls {
+      justify-content: space-between;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .transport, .gain-control { display: flex; align-items: center; gap: 10px; }
+
+    button {
+      min-height: 38px;
+      padding: 0 15px;
+      border: 1px solid #3f6254;
+      border-radius: 4px;
+      color: #07110f;
+      background: var(--signal);
+      font: inherit;
+      font-weight: 650;
+      cursor: pointer;
+    }
+
+    button:hover { background: #a5facb; }
+    button:focus-visible, input:focus-visible { outline: 2px solid #d5ffe4; outline-offset: 3px; }
+
+    button.secondary {
+      color: var(--ink);
+      background: transparent;
+      border-color: #466157;
+    }
+
+    button.secondary:hover { background: #192924; }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .gain-control label { color: var(--muted); font-size: 13px; }
+    output { min-width: 42px; color: var(--ink); font: 13px Consolas, monospace; text-align: right; }
+
+    input[type="range"] {
+      width: min(190px, 38vw);
+      accent-color: var(--signal);
+    }
+
+    .readout {
+      justify-content: space-between;
+      gap: 12px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+      font: 12px Consolas, monospace;
+      flex-wrap: wrap;
+    }
+
+    .readout span { color: var(--ink); }
+    .error { color: var(--danger); }
+
+    @media (max-width: 620px) {
+      .app { width: min(100% - 24px, 1180px); padding-top: 18px; gap: 16px; }
+      .topbar { align-items: flex-start; }
+      .status { padding-top: 5px; }
+      .subtitle { display: none; }
+      .controls { align-items: flex-start; }
+      .gain-control { width: 100%; }
+      input[type="range"] { flex: 1; width: auto; }
+      .scope-shell { min-height: 0; }
+    }
+
+    @media (max-height: 700px) {
+      .app { padding: 14px 0; gap: 12px; }
+      .topbar { padding-bottom: 10px; }
+      .readout { padding-top: 10px; }
+    }
+
+    @media (max-height: 480px) {
+      .subtitle { display: none; }
+      .mark { width: 28px; height: 28px; font-size: 11px; }
+      h1 { font-size: 17px; }
+      .controls { gap: 10px; }
+      button { min-height: 32px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="mark" aria-hidden="true">X/Y</div>
+        <div>
+          <h1>XY 示波器</h1>
+          <p class="subtitle">麦克风立体声输入</p>
+        </div>
+      </div>
+      <div class="status" aria-live="polite">
+        <i class="status-dot" id="statusDot"></i>
+        <span id="statusText">等待麦克风</span>
+      </div>
+    </header>
+
+    <section class="scope-shell" aria-label="XY 音频示波器">
+      <canvas id="scope"></canvas>
+      <p class="axis axis-y">Y · 右声道</p>
+      <p class="axis axis-x">X · 左声道</p>
+    </section>
+
+    <section class="controls" aria-label="示波器控制">
+      <div class="transport">
+        <button id="startButton" type="button">启用麦克风</button>
+        <button id="stopButton" class="secondary" type="button" disabled>停止</button>
+      </div>
+      <div class="gain-control">
+        <label for="gain">显示增益</label>
+        <input id="gain" type="range" min="0.25" max="5" value="1" step="0.05">
+        <output id="gainValue" for="gain">1.00x</output>
+      </div>
+    </section>
+
+    <footer class="readout">
+      <div>采样点 <span id="sampleCount">0</span></div>
+      <div id="message">X 轴使用左声道，Y 轴使用右声道</div>
+    </footer>
+  </main>
+
+  <script>
+    const canvas = document.querySelector('#scope');
+    const context = canvas.getContext('2d');
+    const startButton = document.querySelector('#startButton');
+    const stopButton = document.querySelector('#stopButton');
+    const gainInput = document.querySelector('#gain');
+    const gainValue = document.querySelector('#gainValue');
+    const statusDot = document.querySelector('#statusDot');
+    const statusText = document.querySelector('#statusText');
+    const sampleCount = document.querySelector('#sampleCount');
+    const message = document.querySelector('#message');
+
+    let audioContext;
+    let stream;
+    let leftAnalyser;
+    let rightAnalyser;
+    let leftSamples;
+    let rightSamples;
+    let animationFrame;
+    let displayGain = Number(gainInput.value);
+    const traceSamples = 512;
+
+    function resizeCanvas() {
+      const ratio = window.devicePixelRatio || 1;
+      const { width, height } = canvas.getBoundingClientRect();
+      canvas.width = Math.max(1, Math.round(width * ratio));
+      canvas.height = Math.max(1, Math.round(height * ratio));
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    }
+
+    function drawGrid(width, height) {
+      context.clearRect(0, 0, width, height);
+      context.fillStyle = '#07110f';
+      context.fillRect(0, 0, width, height);
+      context.strokeStyle = '#173029';
+      context.lineWidth = 1;
+
+      const divisions = 8;
+      for (let index = 0; index <= divisions; index += 1) {
+        const x = Math.round((width / divisions) * index) + 0.5;
+        const y = Math.round((height / divisions) * index) + 0.5;
+        context.beginPath();
+        context.moveTo(x, 0);
+        context.lineTo(x, height);
+        context.moveTo(0, y);
+        context.lineTo(width, y);
+        context.stroke();
+      }
+
+      context.strokeStyle = '#476b5b';
+      context.beginPath();
+      context.moveTo(width / 2, 0);
+      context.lineTo(width / 2, height);
+      context.moveTo(0, height / 2);
+      context.lineTo(width, height / 2);
+      context.stroke();
+    }
+
+    function render() {
+      const { width, height } = canvas.getBoundingClientRect();
+      drawGrid(width, height);
+
+      if (leftAnalyser && rightAnalyser) {
+        leftAnalyser.getFloatTimeDomainData(leftSamples);
+        rightAnalyser.getFloatTimeDomainData(rightSamples);
+        const centerX = width / 2;
+        const centerY = height / 2;
+        const scale = Math.min(width, height) * 0.46 * displayGain;
+        let startIndex = 0;
+
+        // Start at a consistent phase point so complex input does not fill the entire display.
+        for (let index = 0; index < leftSamples.length; index += 1) {
+          const previousIndex = (index - 1 + leftSamples.length) % leftSamples.length;
+          if (leftSamples[previousIndex] <= 0 && leftSamples[index] > 0) {
+            startIndex = index;
+            break;
+          }
+        }
+
+        context.beginPath();
+        for (let index = 0; index < traceSamples; index += 1) {
+          const sampleIndex = (startIndex + index) % leftSamples.length;
+          const x = centerX - leftSamples[sampleIndex] * scale;
+          const y = centerY + rightSamples[sampleIndex] * scale;
+          if (index === 0) context.moveTo(x, y);
+          else context.lineTo(x, y);
+        }
+        context.strokeStyle = 'rgba(129, 242, 177, 0.88)';
+        context.lineWidth = 1;
+        context.stroke();
+        sampleCount.textContent = String(traceSamples);
+      }
+
+      animationFrame = requestAnimationFrame(render);
+    }
+
+    function setStatus(text, active, error = false) {
+      statusText.textContent = text;
+      statusDot.classList.toggle('active', active);
+      message.classList.toggle('error', error);
+    }
+
+    function stopMicrophone() {
+      cancelAnimationFrame(animationFrame);
+      animationFrame = undefined;
+      stream?.getTracks().forEach((track) => track.stop());
+      audioContext?.close();
+      stream = undefined;
+      audioContext = undefined;
+      leftAnalyser = undefined;
+      rightAnalyser = undefined;
+      sampleCount.textContent = '0';
+      startButton.disabled = false;
+      stopButton.disabled = true;
+      setStatus('等待麦克风', false);
+      message.textContent = 'X 轴使用左声道，Y 轴使用右声道';
+    }
+
+    async function startMicrophone() {
+      startButton.disabled = true;
+      setStatus('正在请求授权', false);
+      message.textContent = '请在浏览器中允许访问麦克风';
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { channelCount: { ideal: 2 }, echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+        });
+        audioContext = new AudioContext();
+        await audioContext.resume();
+
+        const source = audioContext.createMediaStreamSource(stream);
+        const splitter = audioContext.createChannelSplitter(2);
+        leftAnalyser = audioContext.createAnalyser();
+        rightAnalyser = audioContext.createAnalyser();
+        leftAnalyser.fftSize = traceSamples;
+        rightAnalyser.fftSize = traceSamples;
+        leftAnalyser.smoothingTimeConstant = 0;
+        rightAnalyser.smoothingTimeConstant = 0;
+        leftSamples = new Float32Array(leftAnalyser.fftSize);
+        rightSamples = new Float32Array(rightAnalyser.fftSize);
+
+        source.connect(splitter);
+        splitter.connect(leftAnalyser, 0);
+        splitter.connect(rightAnalyser, 1);
+        stream.getAudioTracks()[0].addEventListener('ended', stopMicrophone, { once: true });
+
+        stopButton.disabled = false;
+        setStatus('正在监听', true);
+        message.textContent = '实时绘制左右声道之间的相位关系';
+        if (!animationFrame) render();
+      } catch (error) {
+        startButton.disabled = false;
+        setStatus('无法访问麦克风', false, true);
+        message.textContent = error.name === 'NotAllowedError' ? '麦克风权限被拒绝' : '当前浏览器不支持或无法连接麦克风';
+      }
+    }
+
+    gainInput.addEventListener('input', () => {
+      displayGain = Number(gainInput.value);
+      gainValue.textContent = `${displayGain.toFixed(2)}x`;
+    });
+    startButton.addEventListener('click', startMicrophone);
+    stopButton.addEventListener('click', stopMicrophone);
+    window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('beforeunload', stopMicrophone);
+
+    resizeCanvas();
+    render();
+  </script>
+</body>
+</html>
