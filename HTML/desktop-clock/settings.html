@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101311">
+  <title>设置 - 桌面时钟</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="settings-page">
+  <main class="settings-shell" data-scale-layout="width" data-base-width="800">
+    <header class="settings-header">
+      <a class="icon-button" href="index.html" aria-label="返回时钟" title="返回">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+      </a>
+      <div>
+        <p>桌面时钟</p>
+        <h1>设置</h1>
+      </div>
+    </header>
+
+    <form id="settings-form">
+      <section class="settings-section" aria-labelledby="display-title">
+        <div class="section-heading">
+          <span>01</span>
+          <div><h2 id="display-title">时间显示</h2><p>调整时间与日期的呈现方式</p></div>
+        </div>
+        <div class="settings-list">
+          <label class="setting-row">
+            <span><strong>时间格式</strong><small>选择 24 小时制或 12 小时制</small></span>
+            <select name="hourCycle" aria-label="时间格式">
+              <option value="24">24 小时</option>
+              <option value="12">12 小时</option>
+            </select>
+          </label>
+          <label class="setting-row">
+            <span><strong>显示秒数</strong><small>在主时钟中显示实时秒数</small></span>
+            <input class="switch-input" name="showSeconds" type="checkbox">
+            <span class="switch" aria-hidden="true"></span>
+          </label>
+          <label class="setting-row">
+            <span><strong>显示日期</strong><small>在时间上方显示星期与完整日期</small></span>
+            <input class="switch-input" name="showDate" type="checkbox">
+            <span class="switch" aria-hidden="true"></span>
+          </label>
+        </div>
+      </section>
+
+      <section class="settings-section" aria-labelledby="appearance-title">
+        <div class="section-heading">
+          <span>02</span>
+          <div><h2 id="appearance-title">外观</h2><p>选择适合当前环境的界面风格</p></div>
+        </div>
+        <fieldset class="theme-options">
+          <legend>主题</legend>
+          <label class="theme-card theme-dark">
+            <input type="radio" name="theme" value="dark">
+            <span class="theme-preview"><i></i><b>12:48</b><em></em></span>
+            <span>深色</span>
+          </label>
+          <label class="theme-card theme-light">
+            <input type="radio" name="theme" value="light">
+            <span class="theme-preview"><i></i><b>12:48</b><em></em></span>
+            <span>浅色</span>
+          </label>
+          <label class="theme-card theme-system">
+            <input type="radio" name="theme" value="system">
+            <span class="theme-preview"><i></i><b>12:48</b><em></em></span>
+            <span>跟随系统</span>
+          </label>
+        </fieldset>
+        <div class="palette-settings">
+          <div class="accent-heading"><strong>主题色</strong><small>为深色与浅色界面分别设置主色和次色</small></div>
+          <div class="palette-switcher" role="tablist" aria-label="编辑配色模式">
+            <button class="palette-tab is-active" type="button" data-palette="dark" role="tab" aria-selected="true">深色配色</button>
+            <button class="palette-tab" type="button" data-palette="light" role="tab" aria-selected="false">浅色配色</button>
+          </div>
+          <div class="theme-presets" aria-label="主题配色预设">
+            <button class="theme-preset" type="button" aria-label="主题配色预设 1"></button>
+            <button class="theme-preset" type="button" aria-label="主题配色预设 2"></button>
+            <button class="theme-preset" type="button" aria-label="主题配色预设 3"></button>
+            <button class="theme-preset" type="button" aria-label="主题配色预设 4"></button>
+            <button class="theme-preset" type="button" aria-label="主题配色预设 5"></button>
+          </div>
+          <div class="palette-colors">
+            <label class="color-picker" title="设置主色调">
+              <span><strong>主色调</strong><small>按钮与进度</small></span>
+              <input name="primaryColor" type="color" value="#b9f46a" aria-label="主色调">
+            </label>
+            <label class="color-picker" title="设置次色调">
+              <span><strong>次色调</strong><small>日期与计时强调</small></span>
+              <input name="secondaryColor" type="color" value="#ff9b74" aria-label="次色调">
+            </label>
+          </div>
+        </div>
+        <div class="background-color-settings">
+          <div class="accent-heading"><strong>背景颜色</strong><small>覆盖当前主题的纯色背景</small></div>
+          <div class="palette-switcher background-palette-switcher" role="tablist" aria-label="编辑背景颜色模式">
+            <button class="palette-tab is-active" type="button" data-background-palette="dark" role="tab" aria-selected="true">深色背景</button>
+            <button class="palette-tab" type="button" data-background-palette="light" role="tab" aria-selected="false">浅色背景</button>
+          </div>
+          <div class="background-color-controls">
+            <label class="setting-row background-color-enabled-row">
+              <span><strong>启用自定义背景颜色</strong></span>
+              <input class="switch-input" name="backgroundColorEnabled" type="checkbox">
+              <span class="switch" aria-hidden="true"></span>
+            </label>
+          </div>
+          <div class="background-color-picker-row">
+            <div class="background-swatches" aria-label="背景色预设">
+              <button class="background-swatch" type="button" aria-label="背景色预设 1"></button>
+              <button class="background-swatch" type="button" aria-label="背景色预设 2"></button>
+              <button class="background-swatch" type="button" aria-label="背景色预设 3"></button>
+              <button class="background-swatch" type="button" aria-label="背景色预设 4"></button>
+              <button class="background-swatch" type="button" aria-label="背景色预设 5"></button>
+            </div>
+            <label class="color-picker" title="自定义背景颜色">
+              <span>自定义颜色</span>
+              <input name="backgroundColor" type="color" value="#101311" aria-label="自定义背景颜色">
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-section" aria-labelledby="background-title">
+        <div class="section-heading">
+          <span>03</span>
+          <div><h2 id="background-title">自定义背景</h2><p>使用本地图片营造专属的时钟氛围</p></div>
+        </div>
+        <div class="background-settings">
+          <div class="background-preview" id="background-preview">
+            <img id="background-preview-image" alt="自定义背景预览" hidden>
+            <span id="background-empty">尚未选择背景图片</span>
+            <b>12:48</b>
+          </div>
+          <div class="background-toolbar">
+            <label class="secondary-button file-button">
+              选择图片
+              <input id="background-file" type="file" accept="image/jpeg,image/png,image/webp,image/avif">
+            </label>
+            <button class="text-button danger-button" id="remove-background" type="button" disabled>移除背景</button>
+          </div>
+          <label class="setting-row background-enabled-row">
+            <span><strong>启用自定义背景</strong><small>保留图片并临时切换回纯色背景</small></span>
+            <input class="switch-input" name="backgroundEnabled" type="checkbox">
+            <span class="switch" aria-hidden="true"></span>
+          </label>
+          <div class="range-settings">
+            <label>
+              <span><strong>模糊</strong><output id="blur-value">0 px</output></span>
+              <input name="backgroundBlur" type="range" min="0" max="30" step="1">
+            </label>
+            <label>
+              <span><strong>亮度</strong><output id="brightness-value">65%</output></span>
+              <input name="backgroundBrightness" type="range" min="20" max="100" step="1">
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-section" aria-labelledby="timer-title">
+        <div class="section-heading">
+          <span>04</span>
+          <div><h2 id="timer-title">计时器</h2><p>配置倒计时完成时的反馈</p></div>
+        </div>
+        <div class="settings-list">
+          <label class="setting-row">
+            <span><strong>完成提示音</strong><small>倒计时结束时播放提示音</small></span>
+            <input class="switch-input" name="soundEnabled" type="checkbox">
+            <span class="switch" aria-hidden="true"></span>
+          </label>
+          <label class="setting-row">
+            <span><strong>保持屏幕常亮</strong><small>运行计时器时尝试阻止屏幕休眠</small></span>
+            <input class="switch-input" name="keepAwake" type="checkbox">
+            <span class="switch" aria-hidden="true"></span>
+          </label>
+        </div>
+      </section>
+
+      <div class="settings-actions">
+        <button class="text-button" id="reset-settings" type="button">恢复默认</button>
+        <a class="primary-button" href="index.html">完成</a>
+      </div>
+    </form>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </main>
+  <script src="config.js"></script>
+  <script src="background.js"></script>
+  <script src="settings.js"></script>
+  <script src="layout.js"></script>
+</body>
+</html>

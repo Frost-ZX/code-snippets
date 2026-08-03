@@ -15,3 +15,7 @@
 - [9.html](./HTML/audio-visualization/9.html)
 - [10.html](./HTML/audio-visualization/10.html)
 - [viewer.html](./HTML/audio-visualization/viewer.html)
+
+### 桌面时钟
+
+- [index.html](./HTML/desktop-clock/index.html)
