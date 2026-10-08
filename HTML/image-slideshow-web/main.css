@@ -1,0 +1,740 @@
+/* ============================================================
+ * 图片幻灯片 - 主样式
+ * 设计思路：
+ *   - 舞台（.stage）始终占满视口，全屏时跟随全屏元素
+ *   - .slideshow 中两张 .slide 重叠，使用 .active 类控制显示
+ *   - 不同动画由 .anim-* 类驱动，使用 CSS 变量控制时长和方向
+ * ============================================================ */
+
+:root {
+  --primary: #4f8cff;
+  --primary-hover: #3a7bff;
+  --bg: #000;
+  --text: #fff;
+  --text-secondary: rgba(255, 255, 255, 0.7);
+  --panel-bg: rgba(20, 20, 20, 0.96);
+  --border: rgba(255, 255, 255, 0.12);
+  --danger: #ff5f56;
+  --warn: #ffb84f;
+  --success: #5cd97a;
+}
+
+/* ---------- Reset ---------- */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Microsoft YaHei', Roboto, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+}
+
+/* ============================================================
+ * 舞台
+ * ============================================================ */
+.stage {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  overflow: hidden;
+  cursor: default;
+}
+
+/* ============================================================
+ * 幻灯片
+ * ============================================================ */
+.slideshow {
+  position: absolute;
+  inset: 0;
+  /* 动画时长（JS 设置） */
+  --anim-duration: 1000ms;
+  --enter-from: 100%;
+  --exit-to: -100%;
+}
+
+.slide {
+  position: absolute;
+  inset: 0;
+  background-color: #000;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center center;
+  opacity: 0;
+  will-change: opacity, transform;
+}
+
+/* ---------- none：直接切换 ---------- */
+.anim-none .slide {
+  transition: none !important;
+}
+.anim-none .slide.active {
+  opacity: 1;
+}
+
+/* ---------- fade：仅透明度过渡 ---------- */
+.anim-fade .slide {
+  transition: opacity var(--anim-duration) ease;
+}
+.anim-fade .slide.active {
+  opacity: 1;
+}
+
+/* ---------- slide：平移（方向由 --enter-from / --exit-to 决定） ---------- */
+.anim-slide .slide {
+  transition:
+    transform var(--anim-duration) cubic-bezier(0.45, 0.05, 0.55, 0.95),
+    opacity var(--anim-duration) ease;
+}
+.anim-slide .slide:not(.active) {
+  opacity: 0;
+  transform: translateX(var(--exit-to, -100%));
+}
+.anim-slide .slide.active {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* ---------- zoom：缩放 ---------- */
+.anim-zoom .slide {
+  transition:
+    transform var(--anim-duration) ease,
+    opacity var(--anim-duration) ease;
+  transform-origin: center center;
+}
+.anim-zoom .slide:not(.active) {
+  opacity: 0;
+  transform: scale(1.15);
+}
+.anim-zoom .slide.active {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* ---------- flip：3D 翻转 ---------- */
+.anim-flip .slide {
+  transition:
+    transform var(--anim-duration) ease,
+    opacity var(--anim-duration) ease;
+  transform-origin: center center;
+  backface-visibility: hidden;
+  perspective: 1200px;
+}
+.anim-flip .slide:not(.active) {
+  opacity: 0;
+  transform: rotateY(90deg);
+}
+.anim-flip .slide.active {
+  opacity: 1;
+  transform: rotateY(0deg);
+}
+
+/* 进入动画初始位置（无过渡）。
+   仅在切换的瞬间使用 .entering 类，
+   强制将下一张幻灯片定位到屏幕外的"进入位置"。
+   !important 是为了临时胜过各动画自己的 .active 规则。 */
+.slide.entering {
+  opacity: 0 !important;
+  transition: none !important;
+}
+
+.anim-slide .slide.entering {
+  transform: translateX(var(--enter-from, 100%)) !important;
+}
+.anim-zoom .slide.entering {
+  transform: scale(0.7) !important;
+}
+.anim-flip .slide.entering {
+  transform: rotateY(90deg) !important;
+}
+
+/* ============================================================
+ * 空状态 / 加载状态
+ * ============================================================ */
+.hint,
+.loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* 让 HTML 的 [hidden] 属性真正生效。
+   用户样式 .hint { display: flex } 的特异性为 (0,0,1,0)，
+   足以覆盖 UA 默认 [hidden] { display: none } —— 因此加了 hidden 属性也不隐藏。
+   提升特异性到 (0,0,2,0) 后，hidden 属性重新生效。 */
+.hint[hidden],
+.loading[hidden] {
+  display: none;
+}
+
+.hint-title {
+  font-size: 36px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  letter-spacing: 1px;
+}
+
+.hint-desc {
+  color: var(--text-secondary);
+  font-size: 16px;
+  max-width: 520px;
+  line-height: 1.6;
+}
+
+.hint-meta {
+  margin-top: 32px;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 13px;
+  max-width: 540px;
+  line-height: 1.6;
+}
+
+.kbd {
+  display: inline-block;
+  min-width: 24px;
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  font-family: inherit;
+}
+
+.loading p {
+  color: var(--text-secondary);
+  margin-top: 16px;
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ============================================================
+ * 控制按钮
+ * ============================================================ */
+.controls {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  gap: 8px;
+  z-index: 10;
+  opacity: 0.35;
+  transition: opacity 0.25s ease;
+}
+
+.controls:hover,
+.controls:focus-within {
+  opacity: 1;
+}
+
+.control-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--text);
+  font-size: 18px;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.control-btn:hover {
+  background: rgba(0, 0, 0, 0.85);
+  transform: scale(1.08);
+}
+
+.control-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.control-btn:active {
+  transform: scale(0.95);
+}
+
+/* ============================================================
+ * 模态框
+ * ============================================================ */
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal[hidden] {
+  display: none;
+}
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  cursor: pointer;
+}
+
+.modal-content {
+  position: relative;
+  background: var(--panel-bg);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  width: min(640px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  animation: modalIn 0.2s ease;
+}
+
+@keyframes modalIn {
+  from { transform: translateY(20px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.modal-header h2 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.close-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease;
+}
+
+.close-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+}
+
+.modal-footer {
+  padding: 14px 24px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+/* ---------- 设置分区 ---------- */
+.setting-section {
+  margin-bottom: 24px;
+}
+
+.setting-section:last-child {
+  margin-bottom: 0;
+}
+
+.setting-section h3 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.section-header h3 {
+  margin: 0;
+}
+
+.setting-tip {
+  color: var(--warn);
+  font-size: 13px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: rgba(255, 184, 79, 0.08);
+  border: 1px solid rgba(255, 184, 79, 0.25);
+  border-radius: 6px;
+  line-height: 1.5;
+}
+
+/* ---------- 表单 ---------- */
+.form-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.form-row input[type='range'] {
+  flex: 1;
+  min-width: 180px;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  outline: none;
+}
+
+.form-row input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--primary);
+  cursor: pointer;
+  border: none;
+}
+
+.form-row input[type='range']::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--primary);
+  cursor: pointer;
+  border: none;
+}
+
+.form-row input[type='number'] {
+  width: 100px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.form-row input[type='number']:focus {
+  border-color: var(--primary);
+}
+
+.form-row select {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font-size: 14px;
+  cursor: pointer;
+  min-width: 180px;
+  outline: none;
+}
+
+.form-row select:focus {
+  border-color: var(--primary);
+}
+
+.form-row select option {
+  background: #1c1c1c;
+  color: #fff;
+}
+
+.unit {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+/* ---------- 切换开关 ---------- */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle input[type='checkbox'] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.toggle-slider {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  transition: background 0.2s ease;
+  flex-shrink: 0;
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s ease;
+}
+
+.toggle input:checked + .toggle-slider {
+  background: var(--primary);
+}
+
+.toggle input:checked + .toggle-slider::before {
+  transform: translateX(18px);
+}
+
+.toggle input:focus-visible + .toggle-slider {
+  box-shadow: 0 0 0 2px rgba(79, 140, 255, 0.4);
+}
+
+.toggle-text {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+/* ---------- 目录列表 ---------- */
+.directory-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.directory-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.directory-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.directory-name {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+.directory-meta {
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.directory-status {
+  font-size: 16px;
+  width: 26px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.directory-status.ok   { color: var(--success); }
+.directory-status.warn { color: var(--warn); }
+.directory-status.err  { color: var(--danger); }
+.directory-status.pending { color: var(--text-secondary); }
+
+.directory-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.icon-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.icon-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.icon-btn.danger {
+  color: var(--danger);
+}
+
+.icon-btn.danger:hover {
+  background: rgba(255, 95, 86, 0.18);
+  border-color: rgba(255, 95, 86, 0.4);
+}
+
+.empty-list {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+/* ============================================================
+ * 按钮
+ * ============================================================ */
+.primary-btn {
+  padding: 8px 18px;
+  border: none;
+  background: var(--primary);
+  color: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.2s ease;
+}
+
+.primary-btn:hover {
+  background: var(--primary-hover);
+}
+
+.primary-btn:disabled {
+  background: rgba(255, 255, 255, 0.1);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.secondary-btn {
+  padding: 8px 18px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.2s ease;
+}
+
+.secondary-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ============================================================
+ * 滚动条
+ * ============================================================ */
+.modal-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.modal-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.modal-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.modal-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* ============================================================
+ * 全屏：舞台自身进入全屏时让里面的内容继续 100% 占据
+ * ============================================================ */
+.stage:fullscreen,
+.stage:-webkit-full-screen {
+  width: 100vw;
+  height: 100vh;
+}
+
+@supports (height: 100dvh) {
+  .stage { height: 100dvh; }
+}
+
+/* ============================================================
+ * 较小屏幕适配
+ * ============================================================ */
+@media (max-width: 600px) {
+  .hint-title { font-size: 28px; }
+  .hint-desc  { font-size: 14px; }
+  .controls   { bottom: 16px; right: 16px; gap: 6px; }
+  .control-btn { width: 40px; height: 40px; font-size: 16px; }
+  .modal-content { width: calc(100vw - 16px); }
+  .modal-header,
+  .modal-body,
+  .modal-footer { padding-left: 16px; padding-right: 16px; }
+}

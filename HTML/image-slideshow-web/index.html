@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>图片幻灯片</title>
+  <link rel="stylesheet" href="main.css" />
+</head>
+<body>
+  <!-- 幻灯片舞台：同时进入全屏的元素 -->
+  <main class="stage" id="stage">
+    <!-- 两张互相叠加的 slide，用于交叉过渡 -->
+    <div class="slideshow" id="slideshow">
+      <div class="slide" id="slideA"></div>
+      <div class="slide" id="slideB"></div>
+    </div>
+
+    <!-- 空状态提示 -->
+    <div class="hint" id="emptyHint">
+      <h1 class="hint-title">图片幻灯片</h1>
+      <p class="hint-desc">
+        点击右下角的 <span class="kbd">⚙</span> 按钮，在设置中添加至少一个图片目录，即可开始播放。
+      </p>
+      <p class="hint-meta">
+        ⚠️ 请使用基于 Chromium 内核的浏览器（Chrome / Edge / Opera），并在 HTTPS 或 localhost 下访问本页面。
+      </p>
+    </div>
+
+    <!-- 加载状态 -->
+    <div class="loading" id="loadingHint" hidden>
+      <div class="spinner"></div>
+      <p>正在读取图片…</p>
+    </div>
+
+    <!-- 控制按钮条 -->
+    <div class="controls" id="controls">
+      <button class="control-btn" id="btnPrev" title="上一张 (←)" aria-label="上一张">⏮</button>
+      <button class="control-btn" id="btnPlayPause" title="播放/暂停 (空格)" aria-label="播放/暂停">
+        <span id="iconPlayPause">⏸</span>
+      </button>
+      <button class="control-btn" id="btnNext" title="下一张 (→)" aria-label="下一张">⏭</button>
+      <button class="control-btn" id="btnFullscreen" title="切换全屏 (F)" aria-label="切换全屏">⛶</button>
+      <button class="control-btn" id="btnSettings" title="设置" aria-label="设置">⚙</button>
+    </div>
+  </main>
+
+  <!-- 设置面板（模态框） -->
+  <div class="modal" id="settingsModal" hidden role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="modal-backdrop" id="modalBackdrop"></div>
+
+    <div class="modal-content">
+      <header class="modal-header">
+        <h2 id="settingsTitle">设置</h2>
+        <button class="close-btn" id="btnCloseSettings" aria-label="关闭">×</button>
+      </header>
+
+      <div class="modal-body">
+        <!-- 目录列表 -->
+        <section class="setting-section">
+          <div class="section-header">
+            <h3>图片目录</h3>
+            <button class="primary-btn" id="btnAddDirectory" type="button">+ 添加目录</button>
+          </div>
+          <p class="setting-tip">
+            💡 每次重新加载页面后，浏览器需要您重新授权访问已添加的目录。
+          </p>
+          <ul class="directory-list" id="directoryList"></ul>
+        </section>
+
+        <!-- 切换间隔 -->
+        <section class="setting-section">
+          <h3>切换间隔</h3>
+          <div class="form-row">
+            <input type="range" id="inputInterval" min="500" max="30000" step="500" />
+            <input type="number" id="inputIntervalNum" min="500" max="30000" step="500" />
+            <span class="unit">毫秒</span>
+          </div>
+        </section>
+
+        <!-- 切换动画 -->
+        <section class="setting-section">
+          <h3>切换动画</h3>
+          <div class="form-row">
+            <select id="selectAnimation">
+              <option value="none">无（直接切换）</option>
+              <option value="fade">淡入淡出</option>
+              <option value="slide">滑动</option>
+              <option value="zoom">缩放</option>
+              <option value="flip">翻转</option>
+            </select>
+          </div>
+        </section>
+
+        <!-- 动画时长 -->
+        <section class="setting-section">
+          <h3>动画时长</h3>
+          <div class="form-row">
+            <input type="range" id="inputDuration" min="0" max="3000" step="50" />
+            <input type="number" id="inputDurationNum" min="0" max="3000" step="50" />
+            <span class="unit">毫秒</span>
+          </div>
+        </section>
+
+        <!-- 随机显示 -->
+        <section class="setting-section">
+          <h3>随机显示</h3>
+          <label class="toggle">
+            <input type="checkbox" id="inputRandom" />
+            <span class="toggle-slider"></span>
+            <span class="toggle-text">启用后将以随机顺序展示图片</span>
+          </label>
+        </section>
+      </div>
+
+      <footer class="modal-footer">
+        <button class="secondary-btn" id="btnReloadImages" type="button" title="重新读取所有目录中的图片">
+          重新加载图片
+        </button>
+        <button class="primary-btn" id="btnSaveSettings" type="button">
+          保存并关闭
+        </button>
+      </footer>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
