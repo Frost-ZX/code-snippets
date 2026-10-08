@@ -2,6 +2,10 @@
 
 ## HTML
 
+### 图片幻灯片
+
+- [index.html](./HTML/image-slideshow-web/index.html)
+
 ### 音频可视化
 
 - [1.html](./HTML/audio-visualization/1.html)
